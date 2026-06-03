@@ -91,6 +91,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="field"><label>Senha</label><input type="password" id="login-senha" placeholder="••••••••"></div>
       <button class="btn" onclick="login()">Entrar</button>
       <button class="btn btn-outline" onclick="trocarForm('cadastro')">Criar conta</button>
+<button class="btn" onclick="loginGoogle()" style="background:#fff;color:#333;border:1.5px solid #d2d2d7;margin-top:10px;">🔵 Entrar com Google</button>
     </div>
     <div id="form-cadastro" style="display:none">
       <div class="field"><label>E-mail</label><input type="email" id="cad-email" placeholder="seu@email.com"></div>
@@ -213,6 +214,13 @@ async function cadastrar(){
 }
 
 async function sair(){await db.auth.signOut();location.reload();}
+
+async function loginGoogle(){
+  await db.auth.signInWithOAuth({
+    provider:"google",
+    options:{ redirectTo: "https://cloudx-backend.vercel.app" }
+  });
+}
 
 function iniciarApp(session){
   token=session.access_token;
