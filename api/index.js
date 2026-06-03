@@ -131,4 +131,6 @@ app.post('/api/webhook/mp', async (req, res) => {
   }
 });
 
+app.get("/", (req, res) => { res.sendFile(require("path").join(__dirname, "../index.html")); });
+
 module.exports = app;
