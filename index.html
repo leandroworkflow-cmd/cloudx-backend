@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudX — Seu armazenamento em nuvem</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--primary:#6C47FF;--primary-dark:#5535e0;--bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--muted:#6e6e73;--border:#d2d2d7;--danger:#ff3b30;--success:#30d158;--radius:12px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.auth-card{background:var(--card);border-radius:20px;padding:40px;width:100%;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,0.08);}
+.auth-logo{font-size:28px;font-weight:700;color:var(--primary);margin-bottom:8px;}
+.auth-sub{color:var(--muted);font-size:14px;margin-bottom:32px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:13px;font-weight:500;margin-bottom:6px;}
+.field input{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;outline:none;transition:border-color .15s;}
+.field input:focus{border-color:var(--primary);}
+.btn{width:100%;padding:13px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:background .15s;}
+.btn:hover{background:var(--primary-dark);}
+.btn-outline{background:transparent;color:var(--primary);border:1.5px solid var(--primary);margin-top:10px;}
+.btn-outline:hover{background:var(--primary);color:#fff;}
+.auth-msg{font-size:13px;color:var(--muted);text-align:center;margin-top:16px;cursor:pointer;}
+.auth-msg span{color:var(--primary);font-weight:500;}
+#app-screen{display:none;}
+.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:16px;height:60px;position:sticky;top:0;z-index:100;}
+.logo{font-size:20px;font-weight:700;color:var(--primary);flex:1;}
+.user-info{font-size:13px;color:var(--muted);}
+.btn-sm{padding:7px 16px;font-size:13px;font-weight:600;border-radius:8px;border:none;cursor:pointer;background:var(--primary);color:#fff;transition:background .15s;}
+.btn-sm:hover{background:var(--primary-dark);}
+.btn-sm.danger{background:var(--danger);}
+.btn-sm.outline{background:transparent;color:var(--primary);border:1.5px solid var(--primary);}
+.layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 60px);}
+.sidebar{background:var(--card);border-right:1px solid var(--border);padding:20px 16px;display:flex;flex-direction:column;gap:4px;}
+.nav-item{padding:10px 14px;border-radius:9px;font-size:14px;font-weight:500;cursor:pointer;color:var(--muted);transition:all .15s;display:flex;align-items:center;gap:10px;}
+.nav-item:hover{background:var(--bg);color:var(--text);}
+.nav-item.active{background:#ede9ff;color:var(--primary);}
+.cota-box{margin-top:auto;background:var(--bg);border-radius:10px;padding:14px;}
+.cota-label{font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;}
+.cota-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+.cota-fill{height:100%;background:var(--primary);border-radius:3px;transition:width .5s;}
+.btn-upgrade{width:100%;margin-top:12px;padding:9px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
+.content{padding:28px;}
+.content-header{display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;}
+.content-title{font-size:22px;font-weight:700;flex:1;}
+.upload-area{border:2px dashed var(--border);border-radius:var(--radius);padding:40px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:24px;}
+.upload-area:hover,.upload-area.drag{border-color:var(--primary);background:#f0ecff;}
+.upload-emoji{font-size:40px;}
+#fileInput{display:none;}
+.upload-progress{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:16px;display:none;}
+.progress-bar{height:6px;background:var(--border);border-radius:3px;margin-top:10px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--primary);border-radius:3px;transition:width .3s;}
+.files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;}
+.file-card{background:var(--card);border-radius:var(--radius);padding:20px 16px;cursor:pointer;transition:box-shadow .15s;border:1.5px solid var(--border);position:relative;text-align:center;}
+.file-card:hover{box-shadow:0 4px 16px rgba(0,0,0,0.08);border-color:var(--primary);}
+.file-icon{font-size:36px;margin-bottom:10px;}
+.file-name{font-size:13px;font-weight:500;word-break:break-word;margin-bottom:4px;}
+.file-size{font-size:11px;color:var(--muted);}
+.file-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px;opacity:0;transition:opacity .15s;}
+.file-card:hover .file-actions{opacity:1;}
+.icon-btn{background:var(--bg);border:none;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.icon-btn.del:hover{background:#ffe5e3;}
+.empty{text-align:center;padding:60px;color:var(--muted);}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:center;justify-content:center;padding:24px;}
+.modal{background:var(--card);border-radius:20px;padding:36px;width:100%;max-width:600px;}
+.modal h2{font-size:22px;font-weight:700;margin-bottom:6px;}
+.modal p{color:var(--muted);font-size:14px;margin-bottom:28px;}
+.planos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.plano-card{border:2px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;}
+.plano-card.destaque{border-color:var(--primary);background:#f5f2ff;}
+.plano-nome{font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;}
+.plano-preco{font-size:32px;font-weight:800;margin:10px 0 4px;}
+.plano-preco span{font-size:14px;font-weight:400;color:var(--muted);}
+.plano-storage{font-size:14px;color:var(--muted);margin-bottom:16px;}
+.btn-plano{width:100%;padding:10px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:9999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.erro{background:var(--danger);}
+.toast.ok{background:#1c8c4e;}
+</style>
+</head>
+<body>
+
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">☁️ CloudX</div>
+    <div class="auth-sub">Seu armazenamento seguro na nuvem</div>
+    <div id="form-login">
+      <div class="field"><label>E-mail</label><input type="email" id="login-email" placeholder="seu@email.com"></div>
+      <div class="field"><label>Senha</label><input type="password" id="login-senha" placeholder="••••••••"></div>
+      <button class="btn" onclick="login()">Entrar</button>
+      <button class="btn btn-outline" onclick="trocarForm('cadastro')">Criar conta</button>
+    </div>
+    <div id="form-cadastro" style="display:none">
+      <div class="field"><label>E-mail</label><input type="email" id="cad-email" placeholder="seu@email.com"></div>
+      <div class="field"><label>Senha</label><input type="password" id="cad-senha" placeholder="Mínimo 6 caracteres"></div>
+      <button class="btn" onclick="cadastrar()">Criar conta grátis</button>
+      <button class="btn btn-outline" onclick="trocarForm('login')">Já tenho conta</button>
+    </div>
+  </div>
+</div>
+
+<div id="app-screen">
+  <div class="topbar">
+    <div class="logo">☁️ CloudX</div>
+    <span class="user-info" id="topbar-email"></span>
+    <button class="btn-sm outline" onclick="abrirPlanos()">⬆️ Upgrade</button>
+    <button class="btn-sm danger" onclick="sair()">Sair</button>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="nav-item active">📁 Meus arquivos</div>
+      <div class="cota-box">
+        <div class="cota-label"><span id="cota-usado">0 GB</span><span id="cota-limite">1 GB</span></div>
+        <div class="cota-bar"><div class="cota-fill" id="cota-fill" style="width:0%"></div></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px;" id="cota-plano">Plano Free</div>
+        <button class="btn-upgrade" onclick="abrirPlanos()">🚀 Fazer upgrade</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="content-header">
+        <div class="content-title">Meus arquivos</div>
+        <button class="btn-sm" onclick="novaPasta()">+ Nova pasta</button>
+        <button class="btn-sm" onclick="document.getElementById('fileInput').click()">⬆️ Enviar</button>
+      </div>
+      <input type="file" id="fileInput" multiple onchange="uploadArquivos(this.files)">
+      <div class="upload-area" id="uploadArea"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="event.preventDefault();this.classList.remove('drag');uploadArquivos(event.dataTransfer.files)"
+        onclick="document.getElementById('fileInput').click()">
+        <div class="upload-emoji">☁️</div>
+        <strong>Arraste arquivos aqui</strong>
+        <p style="color:var(--muted);font-size:14px;margin-top:8px">ou clique para selecionar</p>
+      </div>
+      <div class="upload-progress" id="uploadProgress">
+        <div id="progressNome" style="font-size:14px;font-weight:500;"></div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      </div>
+      <div class="files-grid" id="filesGrid"></div>
+      <div class="empty" id="emptyState" style="display:none"><div style="font-size:48px">📂</div><p style="margin-top:12px">Pasta vazia — envie seu primeiro arquivo!</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="planosOverlay" onclick="if(event.target===this)fecharPlanos()" style="display:none">
+  <div class="modal" style="position:relative">
+    <button onclick="fecharPlanos()" style="position:absolute;top:16px;right:20px;background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+    <h2>Escolha seu plano</h2>
+    <p>Armazenamento seguro com PIX, boleto ou cartão</p>
+    <div class="planos-grid">
+      <div class="plano-card">
+        <div class="plano-nome">Básico</div>
+        <div class="plano-preco">R$ 9<span>,90/mês</span></div>
+        <div class="plano-storage">50 GB</div>
+        <button class="btn-plano" onclick="assinarPlano('basico')">Assinar</button>
+      </div>
+      <div class="plano-card destaque">
+        <div class="plano-nome">⭐ Pro</div>
+        <div class="plano-preco">R$ 19<span>,90/mês</span></div>
+        <div class="plano-storage">200 GB</div>
+        <button class="btn-plano" onclick="assinarPlano('pro')">Assinar</button>
+      </div>
+      <div class="plano-card">
+        <div class="plano-nome">Business</div>
+        <div class="plano-preco">R$ 49<span>,90/mês</span></div>
+        <div class="plano-storage">1 TB</div>
+        <button class="btn-plano" onclick="assinarPlano('business')">Assinar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://zdzktlqycxyqbqsskmuq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_e4WQ7V1EjIjH2d4n6T0djQ_4NOhZlV1';
+const API = 'https://cloudx-backend.vercel.app';
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let pastaAtual = '';
+let token = '';
+
+function toast(msg, tipo=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show '+tipo;
+  setTimeout(()=>t.className='toast',3000);
+}
+
+function trocarForm(f){
+  ['login','cadastro'].forEach(x=>document.getElementById('form-'+x).style.display=x===f?'':'none');
+}
+
+async function login(){
+  const email=document.getElementById('login-email').value;
+  const senha=document.getElementById('login-senha').value;
+  const {data,error}=await db.auth.signInWithPassword({email,password:senha});
+  if(error)return toast('Erro: '+error.message,'erro');
+  iniciarApp(data.session);
+}
+
+async function cadastrar(){
+  const email=document.getElementById('cad-email').value;
+  const senha=document.getElementById('cad-senha').value;
+  const {error}=await db.auth.signUp({email,password:senha});
+  if(error)return toast('Erro: '+error.message,'erro');
+  toast('Conta criada! Verifique seu e-mail.','ok');
+  trocarForm('login');
+}
+
+async function sair(){await db.auth.signOut();location.reload();}
+
+function iniciarApp(session){
+  token=session.access_token;
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app-screen').style.display='';
+  document.getElementById('topbar-email').textContent=session.user.email;
+  carregarPerfil();listarArquivos();
+}
+
+async function carregarPerfil(){
+  const r=await api('GET','/api/perfil');if(!r)return;
+  document.getElementById('cota-usado').textContent=formatarBytes(r.storage_usado);
+  document.getElementById('cota-limite').textContent=formatarBytes(r.limite);
+  document.getElementById('cota-plano').textContent='Plano '+r.plano.charAt(0).toUpperCase()+r.plano.slice(1);
+  document.getElementById('cota-fill').style.width=r.percentual+'%';
+}
+
+async function listarArquivos(){
+  const grid=document.getElementById('filesGrid');
+  const empty=document.getElementById('emptyState');
+  grid.innerHTML='<div style="grid-column:1/-1;color:var(--muted);font-size:14px">Carregando...</div>';
+  const r=await api('GET','/api/arquivos?pasta='+encodeURIComponent(pastaAtual));
+  if(!r)return;
+  const itens=r.filter(i=>i.name!=='.keep');
+  grid.innerHTML='';
+  if(!itens.length){empty.style.display='';return;}
+  empty.style.display='none';
+  itens.forEach(item=>{
+    const isPasta=!item.metadata;
+    const card=document.createElement('div');
+    card.className='file-card';
+    const caminho=(pastaAtual?pastaAtual+'/':'')+item.name;
+    card.innerHTML=`
+      <div class="file-actions">
+        ${!isPasta?`<button class="icon-btn" onclick="event.stopPropagation();baixarArquivo('${caminho}')" title="Baixar">⬇️</button>`:''}
+        <button class="icon-btn del" onclick="event.stopPropagation();deletarArquivo('${caminho}','${item.name}')" title="Deletar">🗑️</button>
+      </div>
+      <div class="file-icon">${isPasta?'📁':iconeArquivo(item.name)}</div>
+      <div class="file-name">${item.name}</div>
+      <div class="file-size">${isPasta?'Pasta':formatarBytes(item.metadata?.size||0)}</div>`;
+    if(isPasta)card.onclick=()=>{pastaAtual=caminho;listarArquivos();};
+    grid.appendChild(card);
+  });
+}
+
+async function uploadArquivos(files){
+  const progress=document.getElementById('uploadProgress');
+  const fill=document.getElementById('progressFill');
+  const nome=document.getElementById('progressNome');
+  progress.style.display='';
+  for(const file of files){
+    nome.textContent='Enviando: '+file.name;fill.style.width='10%';
+    const form=new FormData();
+    form.append('arquivo',file);form.append('pasta',pastaAtual);
+    try{
+      const resp=await fetch(API+'/api/arquivos/upload',{method:'POST',headers:{'Authorization':'Bearer '+token},body:form});
+      fill.style.width='100%';
+      if(!resp.ok){const err=await resp.json();toast('Erro: '+err.erro,'erro');}
+      else toast(file.name+' enviado!','ok');
+    }catch(e){toast('Erro de conexão','erro');}
+  }
+  setTimeout(()=>{progress.style.display='none';fill.style.width='0%';},800);
+  listarArquivos();carregarPerfil();
+}
+
+async function baixarArquivo(caminho){
+  const uid=(await db.auth.getUser()).data.user.id;
+  const r=await api('GET','/api/arquivos/download?caminho='+encodeURIComponent(uid+'/'+caminho));
+  if(r?.url)window.open(r.url,'_blank');
+}
+
+async function deletarArquivo(caminho,nome){
+  if(!confirm('Deletar "'+nome+'"?'))return;
+  const uid=(await db.auth.getUser()).data.user.id;
+  const r=await api('DELETE','/api/arquivos',{caminho:uid+'/'+caminho});
+  if(r?.ok){toast('Deletado!','ok');listarArquivos();carregarPerfil();}
+}
+
+async function novaPasta(){
+  const nome=prompt('Nome da pasta:');if(!nome?.trim())return;
+  const r=await api('POST','/api/pastas',{nome:nome.trim(),pasta_pai:pastaAtual});
+  if(r?.ok){toast('Pasta criada!','ok');listarArquivos();}
+}
+
+function abrirPlanos(){document.getElementById('planosOverlay').style.display='flex';}
+function fecharPlanos(){document.getElementById('planosOverlay').style.display='none';}
+
+async function assinarPlano(plano){
+  toast('Redirecionando...','');
+  const r=await api('POST','/api/pagamento/criar',{plano});
+  if(r?.url)window.open(r.url,'_blank');
+}
+
+async function api(method,path,body=null){
+  try{
+    const resp=await fetch(API+path,{method,headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+    return await resp.json();
+  }catch(e){toast('Erro de conexão','erro');return null;}
+}
+
+function formatarBytes(b){
+  if(b<1024)return b+' B';
+  if(b<1024*1024)return(b/1024).toFixed(1)+' KB';
+  if(b<1024*1024*1024)return(b/1024/1024).toFixed(1)+' MB';
+  return(b/1024/1024/1024).toFixed(2)+' GB';
+}
+
+function iconeArquivo(nome){
+  const ext=nome.split('.').pop().toLowerCase();
+  const m={pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️',mp4:'🎬',mp3:'🎵',zip:'🗜️',rar:'🗜️',js:'⚙️',py:'🐍',html:'🌐'};
+  return m[ext]||'📎';
+}
+
+db.auth.getSession().then(({data:{session}})=>{if(session)iniciarApp(session);});
+db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session)iniciarApp(session);});
+</script>
+</body>
+</html>
