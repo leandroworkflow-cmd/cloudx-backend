@@ -1,4 +1,3 @@
-require("dotenv").config();
 const express = require('express');
 const multer  = require('multer');
 const cors    = require('cors');
@@ -8,10 +7,10 @@ const mp      = require('../mercadopago');
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
 
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-const db = createClient(
+const getDB = () => createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
@@ -26,16 +25,25 @@ const PLANOS = {
 async function auth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ erro: 'Sem token' });
+  const db = getDB();
   const { data, error } = await db.auth.getUser(token);
   if (error || !data.user) return res.status(401).json({ erro: 'Token inválido' });
   req.user = data.user;
+  req.db = db;
   next();
 }
 
+app.get('/api/perfil', auth, async (req, res) => {
+  const { data, error } = await req.db.from('perfis').select('*').eq('id', req.user.id).single();
+  if (error) return res.status(500).json({ erro: error.message });
+  const limite = PLANOS[data.plano] || PLANOS.free;
+  res.json({ ...data, limite, percentual: Math.round((data.storage_usado / limite) * 100) });
+});
+
 app.get('/api/arquivos', auth, async (req, res) => {
   const pasta = req.query.pasta || '';
-  const caminho = `${req.user.id}/${pasta}`;
-  const { data, error } = await db.storage.from('arquivos').list(caminho, { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
+  const caminho = `${req.user.id}${pasta ? '/' + pasta : ''}`;
+  const { data, error } = await req.db.storage.from('arquivos').list(caminho, { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
   if (error) return res.status(500).json({ erro: error.message });
   res.json(data);
 });
@@ -43,10 +51,10 @@ app.get('/api/arquivos', auth, async (req, res) => {
 app.post('/api/arquivos/upload', auth, upload.single('arquivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
   const pasta = req.body.pasta || '';
-  const caminho = `${req.user.id}/${pasta}/${req.file.originalname}`.replace('//', '/');
-  const { error } = await db.storage.from('arquivos').upload(caminho, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
+  const caminho = `${req.user.id}${pasta ? '/' + pasta : ''}/${req.file.originalname}`;
+  const { error } = await req.db.storage.from('arquivos').upload(caminho, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
   if (error) return res.status(500).json({ erro: error.message });
-  await db.rpc('incrementar_storage', { uid: req.user.id, bytes: req.file.size });
+  await req.db.rpc('incrementar_storage', { uid: req.user.id, bytes: req.file.size });
   res.json({ ok: true, caminho, tamanho: req.file.size });
 });
 
@@ -54,7 +62,7 @@ app.get('/api/arquivos/download', auth, async (req, res) => {
   const { caminho } = req.query;
   if (!caminho) return res.status(400).json({ erro: 'Caminho obrigatório' });
   if (!caminho.startsWith(req.user.id)) return res.status(403).json({ erro: 'Acesso negado' });
-  const { data, error } = await db.storage.from('arquivos').createSignedUrl(caminho, 3600);
+  const { data, error } = await req.db.storage.from('arquivos').createSignedUrl(caminho, 3600);
   if (error) return res.status(500).json({ erro: error.message });
   res.json({ url: data.signedUrl });
 });
@@ -63,7 +71,7 @@ app.delete('/api/arquivos', auth, async (req, res) => {
   const { caminho } = req.body;
   if (!caminho) return res.status(400).json({ erro: 'Caminho obrigatório' });
   if (!caminho.startsWith(req.user.id)) return res.status(403).json({ erro: 'Acesso negado' });
-  const { error } = await db.storage.from('arquivos').remove([caminho]);
+  const { error } = await req.db.storage.from('arquivos').remove([caminho]);
   if (error) return res.status(500).json({ erro: error.message });
   res.json({ ok: true });
 });
@@ -72,16 +80,9 @@ app.post('/api/pastas', auth, async (req, res) => {
   const { nome, pasta_pai } = req.body;
   if (!nome) return res.status(400).json({ erro: 'Nome obrigatório' });
   const caminho = `${req.user.id}/${pasta_pai ? pasta_pai + '/' : ''}${nome}/.keep`;
-  const { error } = await db.storage.from('arquivos').upload(caminho, Buffer.from(''), { contentType: 'text/plain', upsert: true });
+  const { error } = await req.db.storage.from('arquivos').upload(caminho, Buffer.from(''), { contentType: 'text/plain', upsert: true });
   if (error) return res.status(500).json({ erro: error.message });
   res.json({ ok: true });
-});
-
-app.get('/api/perfil', auth, async (req, res) => {
-  const { data, error } = await db.from('perfis').select('*').eq('id', req.user.id).single();
-  if (error) return res.status(500).json({ erro: error.message });
-  const limite = PLANOS[data.plano] || PLANOS.free;
-  res.json({ ...data, limite, percentual: Math.round((data.storage_usado / limite) * 100) });
 });
 
 app.post('/api/pagamento/criar', auth, async (req, res) => {
@@ -115,6 +116,7 @@ app.post('/api/webhook/mp', async (req, res) => {
   const { type, data } = req.body;
   if (type !== 'payment') return res.sendStatus(200);
   try {
+    const db = getDB();
     const pagamento = await mp.buscarPagamento(data.id);
     if (pagamento.status !== 'approved') return res.sendStatus(200);
     const [userId, plano] = (pagamento.external_reference || '').split('|');
