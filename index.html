@@ -228,11 +228,16 @@ async function loginGoogle(){
 }
 
 function iniciarApp(session){
+  if(!session) return;
   token=session.access_token;
-  document.getElementById('auth-screen').style.display='none';
-  document.getElementById('app-screen').style.display='';
-  document.getElementById('topbar-email').textContent=session.user.email;
-  carregarPerfil();listarArquivos();
+  const auth = document.getElementById('auth-screen');
+  const app = document.getElementById('app-screen');
+  if(auth) auth.style.display='none';
+  if(app) { app.style.display=''; app.style.visibility='visible'; }
+  const email = document.getElementById('topbar-email');
+  if(email) email.textContent=session.user.email;
+  carregarPerfil();
+  listarArquivos();
 }
 
 async function carregarPerfil(){
