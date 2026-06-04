@@ -102,7 +102,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
-<div id="app-screen">
+<div id="app-screen" style="display:none">
   <div class="topbar">
     <div class="logo">☁️ CloudX</div>
     <span class="user-info" id="topbar-email"></span>
@@ -233,7 +233,7 @@ function iniciarApp(session){
   const auth = document.getElementById('auth-screen');
   const app = document.getElementById('app-screen');
   if(auth) auth.style.display='none';
-  if(app) { app.style.display=''; app.style.visibility='visible'; }
+  if(app) { app.style.cssText='display:block !important;visibility:visible !important;'; }
   const email = document.getElementById('topbar-email');
   if(email) email.textContent=session.user.email;
   carregarPerfil();
