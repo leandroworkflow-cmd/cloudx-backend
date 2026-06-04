@@ -344,15 +344,13 @@ function iconeArquivo(nome){
   return m[ext]||'📎';
 }
 
-db.auth.getSession().then(({data:{session}})=>{if(session)iniciarApp(session);});
-
-// Captura redirect do Google
-if(window.location.hash.includes("access_token")){
-  db.auth.getSession().then(({data:{session}})=>{
-    if(session)iniciarApp(session);
-  });
-}
-db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session)iniciarApp(session);});
+// Captura sessão existente e eventos de auth
+db.auth.onAuthStateChange((event, session) => {
+  console.log('Auth event:', event);
+  if (session && ['SIGNED_IN','INITIAL_SESSION','TOKEN_REFRESHED'].includes(event)) {
+    iniciarApp(session);
+  }
+});
 </script>
 </body>
 </html>
