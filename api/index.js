@@ -121,10 +121,25 @@ app.post('/api/webhook/mp', async (req, res) => {
     if (pagamento.status !== 'approved') return res.sendStatus(200);
     const [userId, plano] = (pagamento.external_reference || '').split('|');
     if (!userId || !plano) return res.sendStatus(200);
+    // Busca plano atual para calcular renovação
+    const { data: perfilAtual } = await db.from('perfis').select('plano_expira_em').eq('id', userId).single();
+    
+    // Se já tem plano ativo, renova a partir da data de expiração
+    // Se não, começa agora (30 dias)
+    let novaExpiracao;
+    if(perfilAtual?.plano_expira_em && new Date(perfilAtual.plano_expira_em) > new Date()) {
+      novaExpiracao = new Date(new Date(perfilAtual.plano_expira_em).getTime() + 30 * 24 * 60 * 60 * 1000);
+    } else {
+      novaExpiracao = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    }
+    
     await db.from('perfis').update({
       plano,
-      plano_expira_em: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      plano_expira_em: novaExpiracao.toISOString(),
+      ultimo_pagamento_id: String(data.id),
     }).eq('id', userId);
+    
+    console.log(`✅ Plano ${plano} renovado até ${novaExpiracao.toLocaleDateString('pt-BR')} para ${userId}`);
     res.sendStatus(200);
   } catch (e) {
     res.sendStatus(500);
@@ -132,5 +147,8 @@ app.post('/api/webhook/mp', async (req, res) => {
 });
 
 app.get("/", (req, res) => { res.sendFile(require("path").join(__dirname, "../index.html")); });
+app.get("/sucesso", (req, res) => { res.sendFile(require("path").join(__dirname, "../sucesso.html")); });
+app.get("/erro", (req, res) => { res.send('<html><body style="font-family:sans-serif;text-align:center;padding:80px"><h1>❌ Pagamento não concluído</h1><p>Tente novamente.</p><a href="/">← Voltar</a></body></html>'); });
+app.get("/pendente", (req, res) => { res.send('<html><body style="font-family:sans-serif;text-align:center;padding:80px"><h1>⏳ Pagamento pendente</h1><p>Aguardando confirmação. Seu plano será ativado em breve.</p><a href="/">← Voltar</a></body></html>'); });
 
 module.exports = app;

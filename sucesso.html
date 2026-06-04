@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pagamento confirmado! — CloudX</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f7;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.card{background:#fff;border-radius:20px;padding:48px 40px;text-align:center;max-width:480px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.08);}
+.icon{font-size:72px;margin-bottom:24px;}
+h1{font-size:28px;font-weight:700;color:#1d1d1f;margin-bottom:12px;}
+p{font-size:16px;color:#6e6e73;line-height:1.6;margin-bottom:8px;}
+.plano{display:inline-block;background:#f0ecff;color:#6C47FF;font-weight:700;padding:6px 20px;border-radius:20px;margin:16px 0 24px;}
+.btn{display:inline-block;background:#6C47FF;color:#fff;padding:14px 32px;border-radius:10px;font-size:16px;font-weight:600;text-decoration:none;transition:background .15s;}
+.btn:hover{background:#5535e0;}
+.info{margin-top:24px;font-size:13px;color:#999;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">🎉</div>
+  <h1>Pagamento confirmado!</h1>
+  <p>Seu plano foi ativado com sucesso.</p>
+  <div class="plano" id="planoNome">Carregando...</div>
+  <p>Você já pode aproveitar todo o armazenamento disponível!</p>
+  <br>
+  <a href="/" class="btn">Acessar o CloudX</a>
+  <div class="info">Você receberá um e-mail de confirmação em breve.</div>
+</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const plano = params.get('plano') || '';
+const nomes = { basico: 'Plano Básico — 50 GB', pro: 'Plano Pro — 200 GB', business: 'Plano Business — 1 TB' };
+document.getElementById('planoNome').textContent = nomes[plano] || 'Plano ativado';
+</script>
+</body>
+</html>
