@@ -146,7 +146,13 @@ app.post('/api/webhook/mp', async (req, res) => {
   }
 });
 
-app.get("/", (req, res) => { res.sendFile(require("path").join(__dirname, "../index.html")); });
+const path = require("path");
+const root = path.join(__dirname, "..");
+
+// Serve arquivos estáticos (manifest, sw, ícones)
+app.use(require("express").static(root));
+
+app.get("/", (req, res) => { res.sendFile(path.join(root, "index.html")); });
 app.get("/sucesso", (req, res) => { res.sendFile(require("path").join(__dirname, "../sucesso.html")); });
 app.get("/erro", (req, res) => { res.send('<html><body style="font-family:sans-serif;text-align:center;padding:80px"><h1>❌ Pagamento não concluído</h1><p>Tente novamente.</p><a href="/">← Voltar</a></body></html>'); });
 app.get("/pendente", (req, res) => { res.send('<html><body style="font-family:sans-serif;text-align:center;padding:80px"><h1>⏳ Pagamento pendente</h1><p>Aguardando confirmação. Seu plano será ativado em breve.</p><a href="/">← Voltar</a></body></html>'); });
