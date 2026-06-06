@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- fundo roxo com cantos arredondados -->
+  <rect width="512" height="512" rx="100" fill="#6C4CF1"/>
+  <!-- hexágono -->
+  <polygon points="256,40 440,145 440,367 256,472 72,367 72,145" fill="none" stroke="#8B5CF6" stroke-width="12"/>
+  <polygon points="256,40 440,145 440,367 256,472 72,367 72,145" fill="rgba(139,92,246,0.15)"/>
+  <!-- C do CloudX -->
+  <path d="M310 160 Q180 160 180 256 Q180 352 310 352" stroke="white" stroke-width="36" fill="none" stroke-linecap="round"/>
+  <circle cx="312" cy="160" r="36" fill="white"/>
+  <circle cx="312" cy="352" r="36" fill="white"/>
+  <!-- pontos nos vértices -->
+  <circle cx="256" cy="40" r="12" fill="#a07aff"/>
+  <circle cx="440" cy="145" r="12" fill="#a07aff"/>
+  <circle cx="440" cy="367" r="12" fill="#a07aff"/>
+  <circle cx="256" cy="472" r="12" fill="#a07aff"/>
+  <circle cx="72" cy="367" r="12" fill="#a07aff"/>
+  <circle cx="72" cy="145" r="12" fill="#a07aff"/>
+</svg>
