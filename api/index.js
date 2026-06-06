@@ -153,6 +153,8 @@ app.get("/", (req, res) => { res.sendFile(path.join(root, "index.html")); });
 app.get("/manifest.json", (req, res) => { res.sendFile(path.join(root, "manifest.json")); });
 app.get("/sw.js", (req, res) => { res.setHeader("Content-Type","application/javascript"); res.sendFile(path.join(root, "sw.js")); });
 app.get("/icon.svg", (req, res) => { res.sendFile(path.join(root, "icon.svg")); });
+app.get("/icon-192.png", (req, res) => { res.sendFile(path.join(root, "icon-192.png")); });
+app.get("/icon-512.png", (req, res) => { res.sendFile(path.join(root, "icon-512.png")); });
 app.get("/sucesso", (req, res) => { res.sendFile(path.join(root, "sucesso.html")); });
 app.get("/sucesso", (req, res) => { res.sendFile(require("path").join(__dirname, "../sucesso.html")); });
 app.get("/erro", (req, res) => { res.send('<html><body style="font-family:sans-serif;text-align:center;padding:80px"><h1>❌ Pagamento não concluído</h1><p>Tente novamente.</p><a href="/">← Voltar</a></body></html>'); });
