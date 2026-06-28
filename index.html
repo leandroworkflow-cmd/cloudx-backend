@@ -336,7 +336,7 @@ footer{background:var(--bg-deep);padding:40px 5%;text-align:center;border-top:1p
 <!-- HERO + ILUSTRAÇÃO -->
 <div class="hero-wrap">
   <div class="hero">
-    <div class="hero-badge">✨ 10 GB grátis por 1 ano para os 200 primeiros</div>
+    <div class="hero-badge" id="promoBadge">✨ 10 GB grátis por 1 ano para os 200 primeiros</div>
     <h1>Armazene seus arquivos<br><span>com segurança na nuvem.</span></h1>
     <p>Fotos, vídeos, documentos e projetos sempre disponíveis, em qualquer dispositivo.</p>
     <div class="hero-btns">
@@ -757,6 +757,24 @@ const db = createClient(SUPABASE_URL, SUPABASE_KEY, {
 let pastaAtual = '';
 let token = '';
 
+// ── Atualiza o badge da home com o número real de vagas restantes na promo ──
+async function atualizarVagasPromo(){
+  const badge = document.getElementById('promoBadge');
+  if(!badge) return;
+  try{
+    const resp = await fetch(API+'/api/promo/fundador/vagas');
+    const r = await resp.json();
+    if(typeof r?.vagas_restantes === 'number'){
+      if(r.vagas_restantes > 0){
+        badge.textContent = `✨ 10 GB grátis por 1 ano — restam ${r.vagas_restantes} de ${r.total} vagas`;
+      } else {
+        badge.textContent = '✨ Promoção dos 200 primeiros já esgotada — confira nossos planos';
+      }
+    }
+  }catch(e){ /* mantém o texto padrão se a API não responder */ }
+}
+atualizarVagasPromo();
+
 // ── TOAST ──
 function toast(msg, tipo=''){
   const t=document.getElementById('toast');
@@ -786,10 +804,34 @@ async function login(){
 async function cadastrar(){
   const email=document.getElementById('cad-email').value;
   const senha=document.getElementById('cad-senha').value;
-  const {error}=await db.auth.signUp({email,password:senha});
+  const {data,error}=await db.auth.signUp({email,password:senha});
   if(error)return toast('Erro: '+error.message,'erro');
+
+  // Se o Supabase já devolveu sessão (confirmação de e-mail desativada),
+  // tenta aplicar a promo dos 200 primeiros imediatamente.
+  if(data?.session?.access_token){
+    await aplicarPromoFundador(data.session.access_token);
+  }
+
   toast('Conta criada! Faça login.','ok');
   trocarModal('login');
+}
+
+// Chama a rota do backend que decide se o usuário ganha os 10GB/1 ano (200 primeiros)
+async function aplicarPromoFundador(accessToken){
+  try{
+    const resp = await fetch(API+'/api/promo/fundador',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'}
+    });
+    const r = await resp.json();
+    if(r?.aplicado){
+      toast('🎉 Você ganhou 10 GB grátis por 1 ano!','ok');
+    }
+  }catch(e){
+    // Falha silenciosa: não bloqueia o cadastro se a promo não puder ser checada agora
+    console.log('Promo fundador: não foi possível verificar agora.');
+  }
 }
 
 async function sair(){ await db.auth.signOut(); location.reload(); }
@@ -811,6 +853,7 @@ function iniciarApp(session){
   dash.style.cssText='display:block !important;';
   const em = document.getElementById('dash-email');
   if(em) em.textContent = session.user.email;
+  aplicarPromoFundador(token); // seguro chamar sempre: o backend só aplica se ainda estiver no plano free
   carregarPerfil();
   listarArquivos();
 }
