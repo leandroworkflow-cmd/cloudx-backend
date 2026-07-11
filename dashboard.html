@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudX — Dashboard Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0914; color: #e2e0f0; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar { position: fixed; left: 0; top: 0; width: 220px; height: 100vh; background: #0f0e1a; border-right: 1px solid #1e1b3a; padding: 24px 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 10px; padding: 0 20px 24px; border-bottom: 1px solid #1e1b3a; margin-bottom: 16px; }
+  .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #7c3aed, #4f46e5); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .logo span { font-size: 18px; font-weight: 700; background: linear-gradient(135deg, #a78bfa, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; color: #6b6890; font-size: 14px; transition: all 0.2s; border-left: 3px solid transparent; }
+  .nav-item:hover, .nav-item.active { color: #a78bfa; background: #1a1730; border-left-color: #7c3aed; }
+  .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+  .nav-section { font-size: 10px; text-transform: uppercase; color: #3d3a5c; padding: 12px 20px 4px; letter-spacing: 1px; }
+
+  /* MAIN */
+  .main { margin-left: 220px; padding: 28px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+  .topbar h1 { font-size: 22px; font-weight: 700; }
+  .topbar p { color: #6b6890; font-size: 13px; margin-top: 2px; }
+  .badge-live { background: #10b981; color: white; font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+
+  /* STATS */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: #0f0e1a; border: 1px solid #1e1b3a; border-radius: 16px; padding: 20px; transition: border-color 0.2s; }
+  .stat-card:hover { border-color: #7c3aed44; }
+  .stat-label { font-size: 12px; color: #6b6890; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .stat-value { font-size: 32px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 12px; color: #6b6890; margin-top: 6px; }
+  .stat-up { color: #10b981; }
+  .stat-down { color: #ef4444; }
+  .stat-neutral { color: #f59e0b; }
+
+  /* CHARTS ROW */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-card { background: #0f0e1a; border: 1px solid #1e1b3a; border-radius: 16px; padding: 20px; }
+  .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: #c4b5fd; }
+  canvas { max-height: 200px; }
+
+  /* LEADS TABLE */
+  .section-card { background: #0f0e1a; border: 1px solid #1e1b3a; border-radius: 16px; padding: 20px; margin-bottom: 24px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .section-header h3 { font-size: 14px; font-weight: 600; color: #c4b5fd; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; color: #4a4870; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #1e1b3a; }
+  td { padding: 10px 12px; border-bottom: 1px solid #1a1730; color: #c4b5fd; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #13112a; }
+
+  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-novo       { background: #1e3a5f; color: #60a5fa; }
+  .badge-conversa   { background: #2d1f5e; color: #a78bfa; }
+  .badge-qualificado{ background: #1a3a2a; color: #34d399; }
+  .badge-convertido { background: #1a3320; color: #10b981; }
+  .badge-perdido    { background: #3a1a1a; color: #f87171; }
+
+  .score-bar { height: 6px; border-radius: 3px; background: #1e1b3a; width: 80px; display: inline-block; vertical-align: middle; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #7c3aed, #10b981); }
+
+  /* CAMPAIGNS */
+  .campaigns-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .camp-card { background: #0f0e1a; border: 1px solid #1e1b3a; border-radius: 14px; padding: 16px; }
+  .camp-platform { font-size: 11px; color: #6b6890; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+  .camp-name { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: #e2e0f0; }
+  .camp-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .camp-stat { }
+  .camp-stat-label { font-size: 10px; color: #4a4870; }
+  .camp-stat-val { font-size: 16px; font-weight: 700; color: #a78bfa; }
+  .camp-status { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; margin-top: 10px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot-ativa { background: #10b981; }
+  .dot-pausada { background: #f59e0b; }
+
+  /* SOURCES */
+  .sources-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .source-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #1a1730; }
+  .source-item:last-child { border-bottom: none; }
+  .source-name { flex: 1; font-size: 13px; color: #c4b5fd; }
+  .source-count { font-weight: 700; color: #a78bfa; }
+  .source-bar-wrap { width: 80px; height: 5px; background: #1e1b3a; border-radius: 3px; overflow: hidden; }
+  .source-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #7c3aed, #4f46e5); }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .charts-row, .campaigns-grid, .sources-row { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">☁️</div>
+    <span>CloudX</span>
+  </div>
+  <div class="nav-section">Principal</div>
+  <div class="nav-item active"><span class="icon">📊</span> Dashboard</div>
+  <div class="nav-item"><span class="icon">👥</span> Leads / CRM</div>
+  <div class="nav-item"><span class="icon">💬</span> Conversas</div>
+  <div class="nav-section">Marketing</div>
+  <div class="nav-item"><span class="icon">📣</span> Campanhas</div>
+  <div class="nav-item"><span class="icon">✍️</span> Criar Conteúdo</div>
+  <div class="nav-section">Config</div>
+  <div class="nav-item"><span class="icon">⚙️</span> Configurações</div>
+  <div class="nav-item"><span class="icon">🔌</span> Integrações</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div>
+      <h1>Dashboard</h1>
+      <p>Visão geral — Julho 2026</p>
+    </div>
+    <span class="badge-live">● Ao vivo</span>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">👥 Total de Leads</div>
+      <div class="stat-value">5</div>
+      <div class="stat-sub"><span class="stat-up">+2</span> esta semana</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">✅ Convertidos</div>
+      <div class="stat-value" style="color:#10b981">1</div>
+      <div class="stat-sub">Taxa: <span class="stat-up">20%</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">💬 Em Conversa</div>
+      <div class="stat-value" style="color:#a78bfa">1</div>
+      <div class="stat-sub"><span class="stat-neutral">1 qualificado</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">❌ Perdidos</div>
+      <div class="stat-value" style="color:#ef4444">1</div>
+      <div class="stat-sub">Taxa abandono: <span class="stat-down">20%</span></div>
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">📈 Status dos Leads</div>
+      <canvas id="statusChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">📣 Performance das Campanhas</div>
+      <canvas id="campaignChart"></canvas>
+    </div>
+  </div>
+
+  <!-- LEADS TABLE -->
+  <div class="section-card">
+    <div class="section-header">
+      <h3>👥 CRM — Leads Recentes</h3>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Status</th>
+          <th>Plano Rec.</th>
+          <th>Origem</th>
+          <th>Score</th>
+          <th>Serviço Atual</th>
+          <th>Último Contato</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>João Silva</strong><br><span style="color:#4a4870;font-size:11px">joao@email.com</span></td>
+          <td><span class="badge badge-conversa">Em Conversa</span></td>
+          <td>⭐ PLUS</td>
+          <td>Chat</td>
+          <td>
+            <div class="score-bar"><div class="score-fill" style="width:75%"></div></div>
+            <span style="font-size:11px;color:#a78bfa;margin-left:6px">75</span>
+          </td>
+          <td>Google Drive</td>
+          <td style="color:#6b6890">10/07/2026</td>
+        </tr>
+        <tr>
+          <td><strong>Maria Santos</strong><br><span style="color:#4a4870;font-size:11px">maria@email.com</span></td>
+          <td><span class="badge badge-qualificado">Qualificado</span></td>
+          <td>🟡 ESSENCIAL</td>
+          <td>Orgânico</td>
+          <td>
+            <div class="score-bar"><div class="score-fill" style="width:82%"></div></div>
+            <span style="font-size:11px;color:#a78bfa;margin-left:6px">82</span>
+          </td>
+          <td>Dropbox</td>
+          <td style="color:#6b6890">09/07/2026</td>
+        </tr>
+        <tr>
+          <td><strong>Pedro Oliveira</strong><br><span style="color:#4a4870;font-size:11px">pedro@email.com</span></td>
+          <td><span class="badge badge-convertido">Convertido ✓</span></td>
+          <td>💎 PREMIUM</td>
+          <td>Ads</td>
+          <td>
+            <div class="score-bar"><div class="score-fill" style="width:95%"></div></div>
+            <span style="font-size:11px;color:#10b981;margin-left:6px">95</span>
+          </td>
+          <td>—</td>
+          <td style="color:#6b6890">08/07/2026</td>
+        </tr>
+        <tr>
+          <td><strong>Ana Costa</strong><br><span style="color:#4a4870;font-size:11px">ana@email.com</span></td>
+          <td><span class="badge badge-novo">Novo</span></td>
+          <td>🔵 BÁSICO</td>
+          <td>Indicação</td>
+          <td>
+            <div class="score-bar"><div class="score-fill" style="width:45%"></div></div>
+            <span style="font-size:11px;color:#a78bfa;margin-left:6px">45</span>
+          </td>
+          <td>—</td>
+          <td style="color:#6b6890">10/07/2026</td>
+        </tr>
+        <tr>
+          <td><strong>Carlos Lima</strong><br><span style="color:#4a4870;font-size:11px">carlos@email.com</span></td>
+          <td><span class="badge badge-perdido">Perdido</span></td>
+          <td>—</td>
+          <td>Orgânico</td>
+          <td>
+            <div class="score-bar"><div class="score-fill" style="width:20%"></div></div>
+            <span style="font-size:11px;color:#ef4444;margin-left:6px">20</span>
+          </td>
+          <td>—</td>
+          <td style="color:#6b6890">07/07/2026</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- CAMPAIGNS -->
+  <div class="section-header" style="margin-bottom:12px">
+    <h3 style="font-size:14px;font-weight:600;color:#c4b5fd">📣 Campanhas Ativas</h3>
+  </div>
+  <div class="campaigns-grid">
+    <div class="camp-card">
+      <div class="camp-platform">📸 Instagram</div>
+      <div class="camp-name">CloudX vs Google Drive</div>
+      <div class="camp-stats">
+        <div class="camp-stat"><div class="camp-stat-label">Impressões</div><div class="camp-stat-val">15.420</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Cliques</div><div class="camp-stat-val">892</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Conversões</div><div class="camp-stat-val">47</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Leads</div><div class="camp-stat-val">38</div></div>
+      </div>
+      <div class="camp-status"><div class="dot dot-ativa"></div><span style="color:#10b981">Ativa</span> · R$ 500 budget</div>
+    </div>
+    <div class="camp-card">
+      <div class="camp-platform">🔍 Google Ads</div>
+      <div class="camp-name">Armazenamento Seguro</div>
+      <div class="camp-stats">
+        <div class="camp-stat"><div class="camp-stat-label">Impressões</div><div class="camp-stat-val">8.750</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Cliques</div><div class="camp-stat-val">634</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Conversões</div><div class="camp-stat-val">29</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Leads</div><div class="camp-stat-val">22</div></div>
+      </div>
+      <div class="camp-status"><div class="dot dot-ativa"></div><span style="color:#10b981">Ativa</span> · R$ 800 budget</div>
+    </div>
+    <div class="camp-card">
+      <div class="camp-platform">📘 Facebook</div>
+      <div class="camp-name">10GB Grátis</div>
+      <div class="camp-stats">
+        <div class="camp-stat"><div class="camp-stat-label">Impressões</div><div class="camp-stat-val">22.100</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Cliques</div><div class="camp-stat-val">1.203</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Conversões</div><div class="camp-stat-val">61</div></div>
+        <div class="camp-stat"><div class="camp-stat-label">Leads</div><div class="camp-stat-val">49</div></div>
+      </div>
+      <div class="camp-status"><div class="dot dot-pausada"></div><span style="color:#f59e0b">Pausada</span> · R$ 600 budget</div>
+    </div>
+  </div>
+
+  <!-- SOURCES + PLANOS -->
+  <div class="sources-row">
+    <div class="section-card">
+      <div class="section-header"><h3>🌐 Origem dos Leads</h3></div>
+      <div class="source-item">
+        <span class="source-name">💬 Chat</span>
+        <div class="source-bar-wrap"><div class="source-bar" style="width:60%"></div></div>
+        <span class="source-count">2</span>
+      </div>
+      <div class="source-item">
+        <span class="source-name">🌱 Orgânico</span>
+        <div class="source-bar-wrap"><div class="source-bar" style="width:40%"></div></div>
+        <span class="source-count">2</span>
+      </div>
+      <div class="source-item">
+        <span class="source-name">📣 Ads</span>
+        <div class="source-bar-wrap"><div class="source-bar" style="width:20%"></div></div>
+        <span class="source-count">1</span>
+      </div>
+      <div class="source-item">
+        <span class="source-name">🤝 Indicação</span>
+        <div class="source-bar-wrap"><div class="source-bar" style="width:20%"></div></div>
+        <span class="source-count">1</span>
+      </div>
+    </div>
+    <div class="section-card">
+      <div class="section-header"><h3>📦 Planos Recomendados</h3></div>
+      <div class="source-item">
+        <span class="source-name">💎 PREMIUM</span>
+        <div class="source-bar-wrap"><div class="source-bar" style="width:40%"></div></div>
+        <span class="source-count">1</span>
+      </div>
+      <div class="source-item">
+        <span class="source-name">⭐ PLUS</span>
+        <div class="source-bar-wrap"><div class="source-bar" style="width:40%"></div></div>
+        <span class="source-count">1</span>
+      </div>
+      <div class="source-item">
+        <span class="source-name">🟡 ESSENCIAL</span>
+        <div class="source-bar-wrap"><div class="source-bar" style="width:40%"></div></div>
+        <span class="source-count">1</span>
+      </div>
+      <div class="source-item">
+        <span class="source-name">🔵 BÁSICO</span>
+        <div class="source-bar-wrap"><div class="source-bar" style="width:40%"></div></div>
+        <span class="source-count">1</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// STATUS CHART
+const ctx1 = document.getElementById('statusChart').getContext('2d');
+new Chart(ctx1, {
+  type: 'doughnut',
+  data: {
+    labels: ['Novo', 'Em Conversa', 'Qualificado', 'Convertido', 'Perdido'],
+    datasets: [{
+      data: [1, 1, 1, 1, 1],
+      backgroundColor: ['#3b82f6','#7c3aed','#10b981','#059669','#ef4444'],
+      borderWidth: 0,
+      hoverBackgroundColor: ['#3b82f6','#7c3aed','#10b981','#059669','#ef4444']
+    }]
+  },
+  options: {
+    cutout: '68%',
+    plugins: { legend: { position: 'bottom', labels: { color: '#6b6890', font: { size: 11 }, padding: 12 } } }
+  }
+});
+
+// CAMPAIGN CHART
+const ctx2 = document.getElementById('campaignChart').getContext('2d');
+new Chart(ctx2, {
+  type: 'bar',
+  data: {
+    labels: ['Instagram', 'Google Ads', 'Facebook'],
+    datasets: [
+      { label: 'Leads', data: [38, 22, 49], backgroundColor: '#7c3aed', borderWidth: 0, borderRadius: 6 },
+      { label: 'Conversões', data: [47, 29, 61], backgroundColor: '#4f46e5', borderWidth: 0, borderRadius: 6 }
+    ]
+  },
+  options: {
+    plugins: { legend: { labels: { color: '#6b6890', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: '#6b6890' }, grid: { color: '#1e1b3a' } },
+      y: { ticks: { color: '#6b6890' }, grid: { color: '#1e1b3a' } }
+    }
+  }
+});
+</script>
+</body>
+</html>
