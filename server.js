@@ -145,3 +145,36 @@ app.post('/webhook/mp', async (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 CloudX backend rodando na porta ${PORT}`));
+
+app.get('/dashboard/stats', async (req, res) => {
+  try {
+    const { data: perfis, error } = await db.from('perfis').select('plano, storage_usado');
+    if (error) return res.status(500).json({ erro: error.message });
+
+    const totalUsuarios = perfis.length;
+    const porPlano = { free: 0, basico: 0, pro: 0, business: 0 };
+    let storageTotalUsado = 0;
+
+    perfis.forEach(p => {
+      const plano = p.plano || 'free';
+      if (porPlano[plano] !== undefined) porPlano[plano]++;
+      storageTotalUsado += p.storage_usado || 0;
+    });
+
+    const receitaMensal =
+      (porPlano.basico * PRECOS.basico.valor) +
+      (porPlano.pro * PRECOS.pro.valor) +
+      (porPlano.business * PRECOS.business.valor);
+
+    res.json({
+      ok: true,
+      atualizadoEm: new Date().toISOString(),
+      totalUsuarios,
+      porPlano,
+      storageTotalUsadoGB: (storageTotalUsado / (1024 ** 3)).toFixed(2),
+      receitaMensalEstimada: receitaMensal.toFixed(2),
+    });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});

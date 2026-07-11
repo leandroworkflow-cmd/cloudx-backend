@@ -4,302 +4,176 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CloudX — Dashboard Admin</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0914; color: #e2e0f0; min-height: 100vh; }
-  .sidebar { position: fixed; left: 0; top: 0; width: 220px; height: 100vh; background: #0f0e1a; border-right: 1px solid #1e1b3a; padding: 24px 0; z-index: 100; }
-  .logo { display: flex; align-items: center; gap: 10px; padding: 0 20px 24px; border-bottom: 1px solid #1e1b3a; margin-bottom: 16px; }
-  .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #7c3aed, #4f46e5); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-  .logo span { font-size: 18px; font-weight: 700; background: linear-gradient(135deg, #a78bfa, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; color: #6b6890; font-size: 14px; transition: all 0.2s; border-left: 3px solid transparent; }
-  .nav-item:hover, .nav-item.active { color: #a78bfa; background: #1a1730; border-left-color: #7c3aed; }
-  .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
-  .nav-section { font-size: 10px; text-transform: uppercase; color: #3d3a5c; padding: 12px 20px 4px; letter-spacing: 1px; }
-  .main { margin-left: 220px; padding: 28px; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
-  .topbar h1 { font-size: 22px; font-weight: 700; }
-  .topbar p { color: #6b6890; font-size: 13px; margin-top: 2px; }
-  .btn-refresh { background: #10b981; color: white; font-size: 11px; padding: 6px 16px; border-radius: 20px; font-weight: 600; cursor: pointer; border: none; }
-  .loading { display: flex; align-items: center; justify-content: center; height: 60vh; flex-direction: column; gap: 16px; }
-  .spinner { width: 40px; height: 40px; border: 3px solid #1e1b3a; border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-  .stat-card { background: #0f0e1a; border: 1px solid #1e1b3a; border-radius: 16px; padding: 20px; }
-  .stat-label { font-size: 12px; color: #6b6890; margin-bottom: 8px; }
-  .stat-value { font-size: 32px; font-weight: 700; line-height: 1; }
-  .stat-sub { font-size: 12px; color: #6b6890; margin-top: 6px; }
-  .stat-up { color: #10b981; } .stat-down { color: #ef4444; } .stat-neutral { color: #f59e0b; }
-  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-  .chart-card { background: #0f0e1a; border: 1px solid #1e1b3a; border-radius: 16px; padding: 20px; }
-  .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: #c4b5fd; }
-  canvas { max-height: 200px; }
-  .section-card { background: #0f0e1a; border: 1px solid #1e1b3a; border-radius: 16px; padding: 20px; margin-bottom: 24px; }
-  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-  .section-header h3 { font-size: 14px; font-weight: 600; color: #c4b5fd; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; padding: 8px 12px; color: #4a4870; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #1e1b3a; }
-  td { padding: 10px 12px; border-bottom: 1px solid #1a1730; color: #c4b5fd; }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #13112a; }
-  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
-  .badge-novo        { background: #1e3a5f; color: #60a5fa; }
-  .badge-em_conversa { background: #2d1f5e; color: #a78bfa; }
-  .badge-qualificado { background: #1a3a2a; color: #34d399; }
-  .badge-convertido  { background: #1a3320; color: #10b981; }
-  .badge-perdido     { background: #3a1a1a; color: #f87171; }
-  .score-bar { height: 6px; border-radius: 3px; background: #1e1b3a; width: 80px; display: inline-block; vertical-align: middle; overflow: hidden; }
-  .score-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #7c3aed, #10b981); }
-  .campaigns-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-  .camp-card { background: #0f0e1a; border: 1px solid #1e1b3a; border-radius: 14px; padding: 16px; }
-  .camp-platform { font-size: 11px; color: #6b6890; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
-  .camp-name { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: #e2e0f0; }
-  .camp-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
-  .camp-stat-label { font-size: 10px; color: #4a4870; }
-  .camp-stat-val { font-size: 16px; font-weight: 700; color: #a78bfa; }
-  .camp-status { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; margin-top: 10px; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; }
-  .dot-ativa { background: #10b981; } .dot-pausada { background: #f59e0b; }
-  .sources-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-  .source-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #1a1730; }
-  .source-item:last-child { border-bottom: none; }
-  .source-name { flex: 1; font-size: 13px; color: #c4b5fd; }
-  .source-count { font-weight: 700; color: #a78bfa; min-width: 24px; text-align: right; }
-  .source-bar-wrap { width: 80px; height: 5px; background: #1e1b3a; border-radius: 3px; overflow: hidden; }
-  .source-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #7c3aed, #4f46e5); }
-  @media (max-width: 900px) {
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .charts-row, .campaigns-grid, .sources-row { grid-template-columns: 1fr; }
-    .sidebar { display: none; }
-    .main { margin-left: 0; padding: 16px; }
+  :root {
+    --bg: #0b0b12;
+    --card: #15151f;
+    --border: #262635;
+    --purple: #7c5cff;
+    --text: #e8e8f0;
+    --muted: #8b8b9e;
+    --green: #3ddc84;
+    --red: #ff5c6c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 40px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+  }
+  h1 { font-size: 24px; font-weight: 700; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  button {
+    background: var(--purple);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card .label {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-size: 28px;
+    font-weight: 700;
+  }
+  .planos {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .planos h2 { font-size: 16px; margin-bottom: 16px; }
+  .plano-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .plano-row:last-child { border-bottom: none; }
+  .erro {
+    color: var(--red);
+    background: rgba(255,92,108,0.1);
+    border: 1px solid var(--red);
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  .loading { color: var(--muted); font-size: 14px; }
+  footer {
+    margin-top: 32px;
+    color: var(--muted);
+    font-size: 12px;
   }
 </style>
 </head>
 <body>
 
-<div class="sidebar">
-  <div class="logo">
-    <div class="logo-icon">☁️</div>
-    <span>CloudX</span>
+<header>
+  <div>
+    <h1>Dashboard — CloudX</h1>
+    <p class="subtitle" id="status">Carregando dados reais...</p>
   </div>
-  <div class="nav-section">Principal</div>
-  <div class="nav-item active"><span class="icon">📊</span> Dashboard</div>
-  <div class="nav-item"><span class="icon">👥</span> Leads / CRM</div>
-  <div class="nav-item"><span class="icon">💬</span> Conversas</div>
-  <div class="nav-section">Marketing</div>
-  <div class="nav-item"><span class="icon">📣</span> Campanhas</div>
-  <div class="nav-item"><span class="icon">✍️</span> Criar Conteúdo</div>
-</div>
+  <button onclick="carregarDados()">↻ Atualizar</button>
+</header>
 
-<div class="main">
-  <div class="topbar">
-    <div>
-      <h1>Dashboard</h1>
-      <p id="last-updated">Carregando dados reais...</p>
-    </div>
-    <button class="btn-refresh" onclick="loadData()">↻ Atualizar</button>
+<div id="erroBox"></div>
+
+<div class="grid" id="cards" style="display:none">
+  <div class="card">
+    <div class="label">Total de usuários</div>
+    <div class="value" id="totalUsuarios">—</div>
   </div>
-
-  <div id="loading" class="loading">
-    <div class="spinner"></div>
-    <p style="color:#6b6890;font-size:14px">Buscando dados em tempo real...</p>
+  <div class="card">
+    <div class="label">Armazenamento usado</div>
+    <div class="value" id="storageTotal">—</div>
   </div>
-
-  <div id="content" style="display:none">
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">👥 Total de Leads</div>
-        <div class="stat-value" id="s-leads">—</div>
-        <div class="stat-sub" id="s-leads-sub"></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">✅ Convertidos</div>
-        <div class="stat-value" id="s-conv" style="color:#10b981">—</div>
-        <div class="stat-sub" id="s-conv-rate"></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">🎯 Score Médio</div>
-        <div class="stat-value" id="s-score" style="color:#a78bfa">—</div>
-        <div class="stat-sub">qualidade dos leads</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">📣 Campanhas</div>
-        <div class="stat-value" id="s-camp" style="color:#f59e0b">—</div>
-        <div class="stat-sub" id="s-camp-sub"></div>
-      </div>
-    </div>
-
-    <div class="charts-row">
-      <div class="chart-card">
-        <div class="chart-title">📊 Status dos Leads</div>
-        <canvas id="statusChart"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">📣 Performance por Campanha</div>
-        <canvas id="campaignChart"></canvas>
-      </div>
-    </div>
-
-    <div class="section-card">
-      <div class="section-header"><h3>👥 CRM — Leads por Score</h3></div>
-      <table>
-        <thead>
-          <tr>
-            <th>Nome</th><th>Status</th><th>Plano Rec.</th><th>Origem</th><th>Score</th><th>Serviço Atual</th><th>Último Contato</th>
-          </tr>
-        </thead>
-        <tbody id="leads-tbody"></tbody>
-      </table>
-    </div>
-
-    <div style="margin-bottom:12px">
-      <h3 style="font-size:14px;font-weight:600;color:#c4b5fd">📣 Campanhas</h3>
-    </div>
-    <div class="campaigns-grid" id="camps-grid"></div>
-
-    <div class="sources-row">
-      <div class="section-card">
-        <div class="section-header"><h3>🌐 Origem dos Leads</h3></div>
-        <div id="sources-list"></div>
-      </div>
-      <div class="section-card">
-        <div class="section-header"><h3>📦 Planos Recomendados</h3></div>
-        <div id="plans-list"></div>
-      </div>
-    </div>
+  <div class="card">
+    <div class="label">Receita mensal estimada</div>
+    <div class="value" id="receitaMensal">—</div>
   </div>
 </div>
+
+<div class="planos" id="planosBox" style="display:none">
+  <h2>Usuários por plano</h2>
+  <div id="planosLista"></div>
+</div>
+
+<footer id="atualizadoEm"></footer>
 
 <script>
-// ── URL PÚBLICA — sem autenticação ──────────────────────────────────
-const API = 'https://api.base44.app/api/apps/6a50219f63145f82a2f92186/functions/cloudxDashboardPublic';
+  // URL do seu próprio backend — já publicado no Vercel
+  const API_URL = 'https://cloudx-backend.vercel.app/dashboard/stats';
 
-const PLAN_E = {free:'💚',basico:'🔵',essencial:'🟡',plus:'⭐',premium:'💎'};
-const PLAN_N = {free:'FREE',basico:'BÁSICO',essencial:'ESSENCIAL',plus:'PLUS',premium:'PREMIUM'};
-const PLAT_E = {instagram:'📸',facebook:'📘',google_ads:'🔍',tiktok:'🎵',email:'📧'};
-const SRC_N  = {chat:'💬 Chat',organico:'🌱 Orgânico',ads:'📣 Ads',indicacao:'🤝 Indicação',direto:'🔗 Direto'};
-const ST_N   = {novo:'Novo',em_conversa:'Em Conversa',qualificado:'Qualificado',convertido:'Convertido ✓',perdido:'Perdido'};
-let chartS, chartC;
+  async function carregarDados() {
+    const status = document.getElementById('status');
+    const erroBox = document.getElementById('erroBox');
+    const cards = document.getElementById('cards');
+    const planosBox = document.getElementById('planosBox');
 
-async function loadData() {
-  document.getElementById('loading').style.display = 'flex';
-  document.getElementById('content').style.display = 'none';
-  try {
-    const res = await fetch(API);
-    const d = await res.json();
-    if (!d.ok) throw new Error(d.error || 'Erro desconhecido');
+    status.textContent = 'Carregando dados reais...';
+    erroBox.innerHTML = '';
 
-    renderStats(d.summary);
-    renderCharts(d.leads_by_status, d.campaigns);
-    renderTable(d.recent_leads);
-    renderCamps(d.campaigns);
-    renderBars('sources-list', d.leads_by_source, SRC_N, {});
-    renderBars('plans-list', d.plans_recommended, PLAN_N, PLAN_E);
+    try {
+      const res = await fetch(API_URL);
+      const dados = await res.json();
 
-    document.getElementById('last-updated').textContent = 'Atualizado: ' + new Date().toLocaleString('pt-BR');
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display = 'block';
-  } catch(e) {
-    document.getElementById('loading').innerHTML = `
-      <div style="color:#f87171;text-align:center;padding:24px">
-        ❌ Erro ao carregar dados: ${e.message}<br><br>
-        <button onclick="loadData()" style="background:#7c3aed;color:white;border:none;padding:8px 18px;border-radius:8px;cursor:pointer">
-          Tentar novamente
-        </button>
-      </div>`;
+      if (!dados.ok) throw new Error(dados.erro || 'Erro desconhecido');
+
+      document.getElementById('totalUsuarios').textContent = dados.totalUsuarios;
+      document.getElementById('storageTotal').textContent = dados.storageTotalUsadoGB + ' GB';
+      document.getElementById('receitaMensal').textContent = 'R$ ' + dados.receitaMensalEstimada;
+
+      const planosLista = document.getElementById('planosLista');
+      planosLista.innerHTML = '';
+      const nomes = { free: 'Free', basico: 'Básico', pro: 'Pro', business: 'Business' };
+      Object.entries(dados.porPlano).forEach(([plano, qtd]) => {
+        const row = document.createElement('div');
+        row.className = 'plano-row';
+        row.innerHTML = `<span>${nomes[plano] || plano}</span><span>${qtd}</span>`;
+        planosLista.appendChild(row);
+      });
+
+      cards.style.display = 'grid';
+      planosBox.style.display = 'block';
+      status.textContent = 'Dados atualizados';
+      document.getElementById('atualizadoEm').textContent =
+        'Última atualização: ' + new Date(dados.atualizadoEm).toLocaleString('pt-BR');
+
+    } catch (e) {
+      erroBox.innerHTML = `<div class="erro">❌ Erro ao carregar dados: ${e.message}</div>`;
+      status.textContent = 'Falha ao carregar';
+    }
   }
-}
 
-function renderStats(s) {
-  document.getElementById('s-leads').textContent = s.total_leads;
-  document.getElementById('s-leads-sub').innerHTML = `<span class="stat-neutral">${s.total_chat_sessions} sessões de chat</span>`;
-  document.getElementById('s-conv').textContent = s.converted;
-  document.getElementById('s-conv-rate').innerHTML = `Taxa: <span class="${s.conv_rate>=20?'stat-up':'stat-down'}">${s.conv_rate}%</span>`;
-  document.getElementById('s-score').textContent = s.avg_score;
-  document.getElementById('s-camp').textContent = s.total_campaigns;
-  document.getElementById('s-camp-sub').innerHTML = `<span class="stat-neutral">${s.total_events} eventos rastreados</span>`;
-}
-
-function renderCharts(byStatus, camps) {
-  const sLabels = Object.keys(byStatus);
-  const sColors = sLabels.map(s=>({novo:'#3b82f6',em_conversa:'#7c3aed',qualificado:'#10b981',convertido:'#059669',perdido:'#ef4444'}[s]||'#4a4870'));
-  if(chartS) chartS.destroy();
-  chartS = new Chart(document.getElementById('statusChart'), {
-    type:'doughnut',
-    data:{ labels:sLabels.map(s=>ST_N[s]||s), datasets:[{ data:Object.values(byStatus), backgroundColor:sColors, borderWidth:0 }] },
-    options:{ cutout:'68%', plugins:{ legend:{ position:'bottom', labels:{ color:'#6b6890', font:{size:11}, padding:12, boxWidth:12 } } } }
-  });
-  if(chartC) chartC.destroy();
-  chartC = new Chart(document.getElementById('campaignChart'), {
-    type:'bar',
-    data:{
-      labels: camps.map(c=>c.platform.replace('_',' ').toUpperCase()),
-      datasets:[
-        { label:'Leads', data:camps.map(c=>c.leads_generated), backgroundColor:'#7c3aed', borderWidth:0, borderRadius:6 },
-        { label:'Conversões', data:camps.map(c=>c.conversions), backgroundColor:'#4f46e5', borderWidth:0, borderRadius:6 }
-      ]
-    },
-    options:{ plugins:{ legend:{ labels:{ color:'#6b6890', font:{size:11} } } }, scales:{ x:{ ticks:{color:'#6b6890'}, grid:{color:'#1e1b3a'} }, y:{ ticks:{color:'#6b6890'}, grid:{color:'#1e1b3a'} } } }
-  });
-}
-
-function renderTable(leads) {
-  document.getElementById('leads-tbody').innerHTML = leads.map(l => {
-    const sc = l.score||0;
-    const scColor = sc>=80?'#10b981':sc>=50?'#a78bfa':'#ef4444';
-    const date = l.last_contact ? new Date(l.last_contact).toLocaleDateString('pt-BR') : '—';
-    return `<tr>
-      <td><strong>${l.name||'—'}</strong><br><span style="color:#4a4870;font-size:11px">${l.email||''}</span></td>
-      <td><span class="badge badge-${l.status||'novo'}">${ST_N[l.status]||l.status}</span></td>
-      <td>${PLAN_E[l.recommended_plan]||''} ${PLAN_N[l.recommended_plan]||'—'}</td>
-      <td style="color:#6b6890;text-transform:capitalize">${l.source||'—'}</td>
-      <td>
-        <div class="score-bar"><div class="score-fill" style="width:${sc}%"></div></div>
-        <span style="font-size:11px;color:${scColor};margin-left:4px">${sc}</span>
-      </td>
-      <td style="color:#6b6890">${l.current_service||'—'}</td>
-      <td style="color:#6b6890">${date}</td>
-    </tr>`;
-  }).join('');
-}
-
-function renderCamps(camps) {
-  document.getElementById('camps-grid').innerHTML = camps.map(c=>`
-    <div class="camp-card">
-      <div class="camp-platform">${PLAT_E[c.platform]||'📣'} ${c.platform.replace('_',' ').toUpperCase()}</div>
-      <div class="camp-name">${c.name}</div>
-      <div class="camp-stats">
-        <div><div class="camp-stat-label">Impressões</div><div class="camp-stat-val">${Number(c.impressions).toLocaleString('pt-BR')}</div></div>
-        <div><div class="camp-stat-label">Cliques</div><div class="camp-stat-val">${Number(c.clicks).toLocaleString('pt-BR')}</div></div>
-        <div><div class="camp-stat-label">Conversões</div><div class="camp-stat-val">${c.conversions}</div></div>
-        <div><div class="camp-stat-label">CTR</div><div class="camp-stat-val">${c.ctr}%</div></div>
-      </div>
-      <div class="camp-status">
-        <div class="dot dot-${c.status}"></div>
-        <span style="color:${c.status==='ativa'?'#10b981':'#f59e0b'}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</span>
-        · R$ ${Number(c.budget).toLocaleString('pt-BR')}
-      </div>
-    </div>`).join('');
-}
-
-function renderBars(elId, obj, names, emojis) {
-  if (!obj || !Object.keys(obj).length) {
-    document.getElementById(elId).innerHTML = '<p style="color:#4a4870;font-size:13px;padding:8px 0">Sem dados ainda</p>';
-    return;
-  }
-  const max = Math.max(...Object.values(obj), 1);
-  document.getElementById(elId).innerHTML = Object.entries(obj)
-    .sort((a,b)=>b[1]-a[1])
-    .map(([k,v])=>`
-      <div class="source-item">
-        <span class="source-name">${emojis[k]||''} ${names[k]||k}</span>
-        <div class="source-bar-wrap"><div class="source-bar" style="width:${Math.round(v/max*100)}%"></div></div>
-        <span class="source-count">${v}</span>
-      </div>`).join('');
-}
-
-loadData();
-setInterval(loadData, 60000);
+  carregarDados();
 </script>
+
 </body>
 </html>
