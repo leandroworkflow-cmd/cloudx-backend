@@ -146,6 +146,38 @@
     padding: 4px 8px; border-radius: 6px; font-weight: 600;
   }
   .whatsapp-btn:hover { background: rgba(61,220,132,0.2); }
+
+  /* ── Campanhas ── */
+  .form-nova-campanha {
+    display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px;
+    margin-bottom: 20px; align-items: end;
+  }
+  .form-field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; }
+  .form-field input, .form-field select {
+    width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit;
+  }
+  .btn-add-campanha {
+    background: var(--purple); color: white; border: none; padding: 10px 18px;
+    border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .btn-add-campanha:hover { opacity: 0.9; }
+  input.mini-input {
+    width: 60px; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 6px; font-size: 12px; text-align: center;
+  }
+  .canal-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    background: rgba(255,255,255,0.06); color: var(--text); text-transform: capitalize;
+  }
+  .status-select.ativa { color: var(--green); }
+  .status-select.pausada { color: var(--yellow); }
+  .status-select.encerrada { color: var(--muted); }
+  .btn-excluir {
+    background: none; border: 1px solid var(--border); color: var(--red);
+    border-radius: 6px; padding: 5px 9px; font-size: 11px; cursor: pointer;
+  }
+  .btn-excluir:hover { background: rgba(255,92,108,0.1); }
 </style>
 </head>
 <body>
@@ -157,6 +189,7 @@
   </div>
   <div class="nav-item active" data-tab="dashboard">📊 Dashboard</div>
   <div class="nav-item" data-tab="crm">👥 Leads / CRM</div>
+  <div class="nav-item" data-tab="campanhas">📣 Campanhas</div>
 </div>
 
 <div class="main">
@@ -239,11 +272,54 @@
     </div>
   </div>
 
+  <!-- ===== TAB: CAMPANHAS ===== -->
+  <div class="tab-content" id="tab-campanhas">
+    <header>
+      <div>
+        <h1>Campanhas</h1>
+        <p class="subtitle">Cadastre e acompanhe suas campanhas de marketing</p>
+      </div>
+      <button class="refresh" onclick="carregarTudo()">↻ Atualizar</button>
+    </header>
+
+    <div class="panel">
+      <h2>➕ Nova campanha</h2>
+      <div class="form-nova-campanha">
+        <div class="form-field">
+          <label>Nome da campanha</label>
+          <input type="text" id="camp-nome" placeholder="Ex: Promo Julho Instagram">
+        </div>
+        <div class="form-field">
+          <label>Canal</label>
+          <select id="camp-canal">
+            <option value="instagram">Instagram</option>
+            <option value="google_ads">Google Ads</option>
+            <option value="facebook">Facebook</option>
+            <option value="organico">Orgânico</option>
+            <option value="indicacao">Indicação</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Orçamento (R$)</label>
+          <input type="number" id="camp-orcamento" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <button class="btn-add-campanha" onclick="criarCampanha()">Adicionar</button>
+      </div>
+    </div>
+
+    <div class="panel leads-table-wrap">
+      <h2>📊 Todas as campanhas</h2>
+      <div id="campanhasTableBox"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
   const STATS_URL = 'https://cloudx-backend.vercel.app/dashboard/stats';
   const LEADS_URL = 'https://cloudx-backend.vercel.app/api/leads';
+  const CAMPANHAS_URL = 'https://cloudx-backend.vercel.app/api/campanhas';
 
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -367,6 +443,105 @@
     }
   }
 
+  // ── CAMPANHAS ──
+  const NOMES_CANAL = { instagram: 'Instagram', google_ads: 'Google Ads', facebook: 'Facebook', organico: 'Orgânico', indicacao: 'Indicação', outro: 'Outro' };
+
+  function renderizarTabelaCampanhas(campanhas) {
+    const box = document.getElementById('campanhasTableBox');
+    if (!campanhas || campanhas.length === 0) {
+      box.innerHTML = '<div class="vazio">Nenhuma campanha cadastrada ainda. Use o formulário acima para adicionar a primeira.</div>';
+      return;
+    }
+
+    let linhas = '';
+    campanhas.forEach(c => {
+      const taxa = c.cliques > 0 ? Math.round((c.conversoes / c.cliques) * 100) : 0;
+      linhas += `
+        <tr>
+          <td>
+            <div class="lead-nome">${c.nome}</div>
+            <div class="lead-contato">R$ ${Number(c.orcamento || 0).toFixed(2)} de orçamento</div>
+          </td>
+          <td><span class="canal-tag">${NOMES_CANAL[c.canal] || c.canal}</span></td>
+          <td>
+            <input type="number" class="mini-input" value="${c.cliques || 0}" min="0"
+              onchange="atualizarCampanha('${c.id}', {cliques: parseInt(this.value)||0})">
+          </td>
+          <td>
+            <input type="number" class="mini-input" value="${c.conversoes || 0}" min="0"
+              onchange="atualizarCampanha('${c.id}', {conversoes: parseInt(this.value)||0})">
+          </td>
+          <td>${taxa}%</td>
+          <td>
+            <select class="status-select ${c.status}" onchange="atualizarCampanha('${c.id}', {status: this.value})">
+              <option value="ativa" ${c.status === 'ativa' ? 'selected' : ''}>Ativa</option>
+              <option value="pausada" ${c.status === 'pausada' ? 'selected' : ''}>Pausada</option>
+              <option value="encerrada" ${c.status === 'encerrada' ? 'selected' : ''}>Encerrada</option>
+            </select>
+          </td>
+          <td><button class="btn-excluir" onclick="excluirCampanha('${c.id}')">Excluir</button></td>
+        </tr>
+      `;
+    });
+
+    box.innerHTML = `
+      <table class="leads-table">
+        <thead>
+          <tr>
+            <th>Campanha</th><th>Canal</th><th>Cliques</th><th>Conversões</th><th>Taxa</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    `;
+  }
+
+  async function criarCampanha() {
+    const nome = document.getElementById('camp-nome').value.trim();
+    const canal = document.getElementById('camp-canal').value;
+    const orcamento = parseFloat(document.getElementById('camp-orcamento').value) || 0;
+
+    if (!nome) { alert('Digite o nome da campanha'); return; }
+
+    try {
+      const resp = await fetch(CAMPANHAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, canal, orcamento }),
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.erro || 'Erro ao criar campanha');
+
+      document.getElementById('camp-nome').value = '';
+      document.getElementById('camp-orcamento').value = '';
+      carregarTudo();
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    }
+  }
+
+  async function atualizarCampanha(id, campos) {
+    try {
+      await fetch(`${CAMPANHAS_URL}/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(campos),
+      });
+    } catch (e) {
+      alert('Erro ao atualizar campanha: ' + e.message);
+    }
+  }
+
+  async function excluirCampanha(id) {
+    if (!confirm('Tem certeza que quer excluir essa campanha?')) return;
+    try {
+      await fetch(`${CAMPANHAS_URL}/${id}`, { method: 'DELETE' });
+      carregarTudo();
+    } catch (e) {
+      alert('Erro ao excluir: ' + e.message);
+    }
+  }
+
   async function carregarTudo() {
     const status = document.getElementById('status');
     const erroBox = document.getElementById('erroBox');
@@ -374,12 +549,14 @@
     erroBox.innerHTML = '';
 
     try {
-      const [resStats, resLeads] = await Promise.all([
+      const [resStats, resLeads, resCampanhas] = await Promise.all([
         fetch(STATS_URL),
         fetch(LEADS_URL),
+        fetch(CAMPANHAS_URL),
       ]);
       const dados = await resStats.json();
       const leads = await resLeads.json();
+      const campanhas = await resCampanhas.json();
 
       if (!dados.ok) throw new Error(dados.erro || 'Erro desconhecido');
 
@@ -411,6 +588,7 @@
       desenharDonut(leadsStats.porStatus, leadsStats.total);
       preencherOrigem(leadsStats.porOrigem, leadsStats.total);
       renderizarTabelaLeads(Array.isArray(leads) ? leads : []);
+      renderizarTabelaCampanhas(Array.isArray(campanhas) ? campanhas : []);
 
     } catch (e) {
       erroBox.innerHTML = `<div class="erro">❌ Erro ao carregar dados: ${e.message}</div>`;

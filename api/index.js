@@ -348,3 +348,60 @@ app.get('/dashboard/stats', async (req, res) => {
     res.status(500).json({ erro: e.message });
   }
 });
+
+// ============================================
+// ROTAS DE CAMPANHAS
+// ============================================
+
+app.get('/api/campanhas', async (req, res) => {
+  const db = getDB();
+  const { data, error } = await db.from('campanhas').select('*').order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json(data);
+});
+
+app.post('/api/campanhas', async (req, res) => {
+  const { nome, canal, orcamento, data_inicio, data_fim, observacoes } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Nome obrigatorio' });
+  const db = getDB();
+  const { data, error } = await db.from('campanhas').insert({
+    nome,
+    canal: canal || 'organico',
+    orcamento: orcamento || 0,
+    data_inicio: data_inicio || new Date().toISOString().slice(0, 10),
+    data_fim: data_fim || null,
+    observacoes: observacoes || null,
+    status: 'ativa',
+    cliques: 0,
+    conversoes: 0,
+  }).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, campanha: data });
+});
+
+app.patch('/api/campanhas/:id', async (req, res) => {
+  const { id } = req.params;
+  const { nome, canal, status, orcamento, cliques, conversoes, data_fim, observacoes } = req.body;
+  const db = getDB();
+  const campos = {};
+  if (nome !== undefined) campos.nome = nome;
+  if (canal !== undefined) campos.canal = canal;
+  if (status !== undefined) campos.status = status;
+  if (orcamento !== undefined) campos.orcamento = orcamento;
+  if (cliques !== undefined) campos.cliques = cliques;
+  if (conversoes !== undefined) campos.conversoes = conversoes;
+  if (data_fim !== undefined) campos.data_fim = data_fim;
+  if (observacoes !== undefined) campos.observacoes = observacoes;
+
+  const { data, error } = await db.from('campanhas').update(campos).eq('id', id).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, campanha: data });
+});
+
+app.delete('/api/campanhas/:id', async (req, res) => {
+  const { id } = req.params;
+  const db = getDB();
+  const { error } = await db.from('campanhas').delete().eq('id', id);
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true });
+});
