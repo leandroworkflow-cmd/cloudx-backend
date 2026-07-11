@@ -27,7 +27,6 @@
     display: flex;
     min-height: 100vh;
   }
-  /* ── Sidebar ── */
   .sidebar {
     width: 220px;
     background: var(--sidebar);
@@ -63,7 +62,6 @@
   .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
   .nav-item.active { background: rgba(124,92,255,0.15); color: var(--purple-light); font-weight: 600; }
 
-  /* ── Main content ── */
   .main { flex: 1; padding: 32px 40px; overflow-x: hidden; }
   header {
     display: flex;
@@ -120,6 +118,34 @@
   .tab-content.active { display: block; }
 
   svg.donut { display: block; margin: 0 auto; }
+
+  /* ── Tabela de leads individuais ── */
+  .leads-table-wrap { margin-top: 20px; overflow-x: auto; }
+  .leads-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .leads-table th {
+    text-align: left; padding: 10px 12px; color: var(--muted);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  .leads-table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .leads-table tr:last-child td { border-bottom: none; }
+  .lead-nome { font-weight: 600; margin-bottom: 2px; }
+  .lead-contato { color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .lead-contato a { color: var(--blue); text-decoration: none; }
+  .lead-contato a:hover { text-decoration: underline; }
+  .lead-msg { color: var(--text); font-size: 12px; max-width: 260px; white-space: pre-wrap; }
+  .lead-data { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  select.status-select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-size: 12px; cursor: pointer;
+  }
+  .whatsapp-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(61,220,132,0.12); color: var(--green);
+    font-size: 11px; text-decoration: none; margin-top: 6px;
+    padding: 4px 8px; border-radius: 6px; font-weight: 600;
+  }
+  .whatsapp-btn:hover { background: rgba(61,220,132,0.2); }
 </style>
 </head>
 <body>
@@ -142,7 +168,7 @@
         <h1>Dashboard — CloudX</h1>
         <p class="subtitle" id="status">Carregando dados reais...</p>
       </div>
-      <button class="refresh" onclick="carregarDados()">↻ Atualizar</button>
+      <button class="refresh" onclick="carregarTudo()">↻ Atualizar</button>
     </header>
 
     <div id="erroBox"></div>
@@ -177,7 +203,7 @@
         <h1>Leads / CRM</h1>
         <p class="subtitle">Dados reais da tabela <code>leads</code> no Supabase</p>
       </div>
-      <button class="refresh" onclick="carregarDados()">↻ Atualizar</button>
+      <button class="refresh" onclick="carregarTudo()">↻ Atualizar</button>
     </header>
 
     <div class="grid" id="crmCards" style="display:none">
@@ -206,15 +232,19 @@
         <div id="origemLista"></div>
       </div>
     </div>
+
+    <div class="panel leads-table-wrap">
+      <h2>📋 Todos os leads</h2>
+      <div id="leadsTableBox"></div>
+    </div>
   </div>
 
 </div>
 
 <script>
-  const API_URL = 'https://cloudx-backend.vercel.app/dashboard/stats';
-  let ultimoDado = null;
+  const STATS_URL = 'https://cloudx-backend.vercel.app/dashboard/stats';
+  const LEADS_URL = 'https://cloudx-backend.vercel.app/api/leads';
 
-  // ── Navegação entre abas ──
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
       document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -225,11 +255,8 @@
   });
 
   const CORES_STATUS = {
-    novo: '#5c9dff',
-    em_conversa: '#ffc857',
-    qualificado: '#9c85ff',
-    convertido: '#3ddc84',
-    perdido: '#ff5c6c',
+    novo: '#5c9dff', em_conversa: '#ffc857', qualificado: '#9c85ff',
+    convertido: '#3ddc84', perdido: '#ff5c6c',
   };
   const NOMES_STATUS = {
     novo: 'Novo', em_conversa: 'Em conversa', qualificado: 'Qualificado',
@@ -240,29 +267,21 @@
   function desenharDonut(porStatus, total) {
     const box = document.getElementById('donutBox');
     if (total === 0) { box.innerHTML = '<div class="vazio">Nenhum lead cadastrado ainda</div>'; return; }
-
     const raio = 60, centro = 80, circunferencia = 2 * Math.PI * raio;
-    let offset = 0;
-    let paths = '';
+    let offset = 0, paths = '';
     Object.entries(porStatus).forEach(([status, qtd]) => {
       if (qtd === 0) return;
-      const fracao = qtd / total;
-      const tamanho = fracao * circunferencia;
+      const fracao = qtd / total, tamanho = fracao * circunferencia;
       paths += `<circle cx="${centro}" cy="${centro}" r="${raio}" fill="none" stroke="${CORES_STATUS[status]}"
         stroke-width="24" stroke-dasharray="${tamanho} ${circunferencia - tamanho}"
         stroke-dashoffset="${-offset}" transform="rotate(-90 ${centro} ${centro})" />`;
       offset += tamanho;
     });
-
     let legenda = '';
     Object.entries(porStatus).forEach(([status, qtd]) => {
       legenda += `<div class="stat-row"><span><span class="badge ${status}">${NOMES_STATUS[status]}</span></span><span>${qtd}</span></div>`;
     });
-
-    box.innerHTML = `
-      <svg class="donut" width="160" height="160" viewBox="0 0 160 160">${paths}</svg>
-      <div style="margin-top:16px">${legenda}</div>
-    `;
+    box.innerHTML = `<svg class="donut" width="160" height="160" viewBox="0 0 160 160">${paths}</svg><div style="margin-top:16px">${legenda}</div>`;
   }
 
   function preencherOrigem(porOrigem, total) {
@@ -276,20 +295,94 @@
     box.innerHTML = html;
   }
 
-  async function carregarDados() {
+  function formatarData(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderizarTabelaLeads(leads) {
+    const box = document.getElementById('leadsTableBox');
+    if (!leads || leads.length === 0) {
+      box.innerHTML = '<div class="vazio">Nenhum lead cadastrado ainda. Assim que alguém preencher o formulário do site, ele aparece aqui.</div>';
+      return;
+    }
+
+    let linhas = '';
+    leads.forEach(lead => {
+      const whatsappNumero = (lead.telefone || '').replace(/\D/g, '');
+      const whatsappLink = whatsappNumero
+        ? `<a class="whatsapp-btn" href="https://wa.me/55${whatsappNumero}" target="_blank">💬 WhatsApp</a>`
+        : '';
+
+      linhas += `
+        <tr>
+          <td>
+            <div class="lead-nome">${lead.nome || '—'}</div>
+            <div class="lead-contato">
+              ${lead.email ? `<a href="mailto:${lead.email}">${lead.email}</a><br>` : ''}
+              ${lead.telefone ? `${lead.telefone}` : ''}
+              ${whatsappLink}
+            </div>
+          </td>
+          <td class="lead-msg">${lead.mensagem ? lead.mensagem : '<span style="color:var(--muted)">Sem mensagem</span>'}</td>
+          <td style="text-transform:capitalize">${lead.origem || '—'}</td>
+          <td>
+            <select class="status-select" onchange="atualizarStatusLead('${lead.id}', this.value)">
+              ${Object.entries(NOMES_STATUS).map(([valor, nome]) =>
+                `<option value="${valor}" ${lead.status === valor ? 'selected' : ''}>${nome}</option>`
+              ).join('')}
+            </select>
+          </td>
+          <td class="lead-data">${formatarData(lead.created_at)}</td>
+        </tr>
+      `;
+    });
+
+    box.innerHTML = `
+      <table class="leads-table">
+        <thead>
+          <tr>
+            <th>Contato</th>
+            <th>Mensagem</th>
+            <th>Origem</th>
+            <th>Status</th>
+            <th>Recebido em</th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    `;
+  }
+
+  async function atualizarStatusLead(id, novoStatus) {
+    try {
+      await fetch(`${LEADS_URL}/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: novoStatus }),
+      });
+      carregarTudo();
+    } catch (e) {
+      alert('Erro ao atualizar status: ' + e.message);
+    }
+  }
+
+  async function carregarTudo() {
     const status = document.getElementById('status');
     const erroBox = document.getElementById('erroBox');
-
     status.textContent = 'Carregando dados reais...';
     erroBox.innerHTML = '';
 
     try {
-      const res = await fetch(API_URL);
-      const dados = await res.json();
-      if (!dados.ok) throw new Error(dados.erro || 'Erro desconhecido');
-      ultimoDado = dados;
+      const [resStats, resLeads] = await Promise.all([
+        fetch(STATS_URL),
+        fetch(LEADS_URL),
+      ]);
+      const dados = await resStats.json();
+      const leads = await resLeads.json();
 
-      // ── Dashboard geral ──
+      if (!dados.ok) throw new Error(dados.erro || 'Erro desconhecido');
+
       document.getElementById('totalUsuarios').textContent = dados.totalUsuarios;
       document.getElementById('storageTotal').textContent = dados.storageTotalUsadoGB + ' GB';
       document.getElementById('receitaMensal').textContent = 'R$ ' + dados.receitaMensalEstimada;
@@ -306,19 +399,18 @@
       document.getElementById('cards').style.display = 'grid';
       document.getElementById('planosBox').style.display = 'block';
       status.textContent = 'Dados atualizados';
-      document.getElementById('atualizadoEm').textContent =
-        'Última atualização: ' + new Date(dados.atualizadoEm).toLocaleString('pt-BR');
+      document.getElementById('atualizadoEm').textContent = 'Última atualização: ' + new Date(dados.atualizadoEm).toLocaleString('pt-BR');
 
-      // ── CRM / Leads ──
-      const leads = dados.leads || { total: 0, porStatus: {}, porOrigem: {}, scoreMedio: 0, taxaConversao: 0 };
-      document.getElementById('totalLeads').textContent = leads.total;
-      document.getElementById('leadsConvertidos').textContent = leads.porStatus.convertido || 0;
-      document.getElementById('taxaConversao').textContent = 'Taxa: ' + leads.taxaConversao + '%';
-      document.getElementById('scoreMedio').textContent = leads.scoreMedio;
+      const leadsStats = dados.leads || { total: 0, porStatus: {}, porOrigem: {}, scoreMedio: 0, taxaConversao: 0 };
+      document.getElementById('totalLeads').textContent = leadsStats.total;
+      document.getElementById('leadsConvertidos').textContent = leadsStats.porStatus.convertido || 0;
+      document.getElementById('taxaConversao').textContent = 'Taxa: ' + leadsStats.taxaConversao + '%';
+      document.getElementById('scoreMedio').textContent = leadsStats.scoreMedio;
       document.getElementById('crmCards').style.display = 'grid';
 
-      desenharDonut(leads.porStatus, leads.total);
-      preencherOrigem(leads.porOrigem, leads.total);
+      desenharDonut(leadsStats.porStatus, leadsStats.total);
+      preencherOrigem(leadsStats.porOrigem, leadsStats.total);
+      renderizarTabelaLeads(Array.isArray(leads) ? leads : []);
 
     } catch (e) {
       erroBox.innerHTML = `<div class="erro">❌ Erro ao carregar dados: ${e.message}</div>`;
@@ -326,7 +418,7 @@
     }
   }
 
-  carregarDados();
+  carregarTudo();
 </script>
 
 </body>
