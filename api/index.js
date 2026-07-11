@@ -224,11 +224,76 @@ app.get("/pendente", (req, res) => { res.send('<html><body style="font-family:sa
 
 module.exports = app;
 
+
+// ============================================
+// ROTAS DE LEADS / CRM
+// ============================================
+
+// Lista todos os leads (usado pelo dashboard admin)
+app.get('/api/leads', async (req, res) => {
+  const db = getDB();
+  const { data, error } = await db.from('leads').select('*').order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json(data);
+});
+
+// Cria um novo lead (pode ser usado por um formulario de contato no site, futuramente)
+app.post('/api/leads', async (req, res) => {
+  const { nome, email, telefone, origem, mensagem, plano_recomendado } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Nome obrigatorio' });
+  const db = getDB();
+  const { data, error } = await db.from('leads').insert({
+    nome, email, telefone,
+    origem: origem || 'organico',
+    mensagem,
+    plano_recomendado,
+    status: 'novo',
+    score: 0,
+  }).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, lead: data });
+});
+
+// Atualiza status/score/plano de um lead (usado no CRM interno)
+app.patch('/api/leads/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status, score, plano_recomendado, mensagem } = req.body;
+  const db = getDB();
+  const campos = {};
+  if (status !== undefined) campos.status = status;
+  if (score !== undefined) campos.score = score;
+  if (plano_recomendado !== undefined) campos.plano_recomendado = plano_recomendado;
+  if (mensagem !== undefined) campos.mensagem = mensagem;
+
+  const { data, error } = await db.from('leads').update(campos).eq('id', id).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, lead: data });
+});
+
+// Remove um lead
+app.delete('/api/leads/:id', async (req, res) => {
+  const { id } = req.params;
+  const db = getDB();
+  const { error } = await db.from('leads').delete().eq('id', id);
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true });
+});
+
+// ============================================
+// SUBSTITUI a rota /dashboard/stats anterior
+// (agora inclui numeros de Leads/CRM tambem)
+// ============================================
+
 app.get('/dashboard/stats', async (req, res) => {
   try {
     const db = getDB();
-    const { data: perfis, error } = await db.from('perfis').select('plano, storage_usado');
-    if (error) return res.status(500).json({ erro: error.message });
+
+    const { data: perfis, error: erroPerfis } = await db.from('perfis').select('plano, storage_usado');
+    if (erroPerfis) return res.status(500).json({ erro: erroPerfis.message });
+
+    const { data: leads, error: erroLeads } = await db.from('leads').select('status, score, origem, plano_recomendado');
+    // Se a tabela de leads ainda nao existir, nao quebra o dashboard -- so retorna vazio
+    const listaLeads = erroLeads ? [] : (leads || []);
 
     const totalUsuarios = perfis.length;
     const porPlano = { free: 0, free_fundador: 0, basico: 0, essencial: 0, plus: 0, premium: 0 };
@@ -247,6 +312,23 @@ app.get('/dashboard/stats', async (req, res) => {
       (porPlano.plus * PRECOS_DASHBOARD.plus) +
       (porPlano.premium * PRECOS_DASHBOARD.premium);
 
+    // ── Estatisticas de Leads ──
+    const totalLeads = listaLeads.length;
+    const porStatus = { novo: 0, em_conversa: 0, qualificado: 0, convertido: 0, perdido: 0 };
+    const porOrigem = {};
+    let somaScore = 0;
+
+    listaLeads.forEach(l => {
+      const status = l.status || 'novo';
+      if (porStatus[status] !== undefined) porStatus[status]++;
+      const origem = l.origem || 'organico';
+      porOrigem[origem] = (porOrigem[origem] || 0) + 1;
+      somaScore += l.score || 0;
+    });
+
+    const scoreMedio = totalLeads > 0 ? Math.round(somaScore / totalLeads) : 0;
+    const taxaConversao = totalLeads > 0 ? Math.round((porStatus.convertido / totalLeads) * 100) : 0;
+
     res.json({
       ok: true,
       atualizadoEm: new Date().toISOString(),
@@ -254,6 +336,13 @@ app.get('/dashboard/stats', async (req, res) => {
       porPlano,
       storageTotalUsadoGB: (storageTotalUsado / (1024 ** 3)).toFixed(2),
       receitaMensalEstimada: receitaMensal.toFixed(2),
+      leads: {
+        total: totalLeads,
+        porStatus,
+        porOrigem,
+        scoreMedio,
+        taxaConversao,
+      },
     });
   } catch (e) {
     res.status(500).json({ erro: e.message });
