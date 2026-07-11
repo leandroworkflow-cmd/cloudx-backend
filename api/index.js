@@ -223,3 +223,39 @@ app.get("/erro", (req, res) => { res.send('<html><body style="font-family:sans-s
 app.get("/pendente", (req, res) => { res.send('<html><body style="font-family:sans-serif;text-align:center;padding:80px"><h1>⏳ Pagamento pendente</h1><p>Aguardando confirmação. Seu plano será ativado em breve.</p><a href="/">← Voltar</a></body></html>'); });
 
 module.exports = app;
+
+app.get('/dashboard/stats', async (req, res) => {
+  try {
+    const db = getDB();
+    const { data: perfis, error } = await db.from('perfis').select('plano, storage_usado');
+    if (error) return res.status(500).json({ erro: error.message });
+
+    const totalUsuarios = perfis.length;
+    const porPlano = { free: 0, free_fundador: 0, basico: 0, essencial: 0, plus: 0, premium: 0 };
+    let storageTotalUsado = 0;
+
+    perfis.forEach(p => {
+      const plano = p.plano || 'free';
+      if (porPlano[plano] !== undefined) porPlano[plano]++;
+      storageTotalUsado += p.storage_usado || 0;
+    });
+
+    const PRECOS_DASHBOARD = { basico: 4.99, essencial: 9.99, plus: 29.99, premium: 49.99 };
+    const receitaMensal =
+      (porPlano.basico * PRECOS_DASHBOARD.basico) +
+      (porPlano.essencial * PRECOS_DASHBOARD.essencial) +
+      (porPlano.plus * PRECOS_DASHBOARD.plus) +
+      (porPlano.premium * PRECOS_DASHBOARD.premium);
+
+    res.json({
+      ok: true,
+      atualizadoEm: new Date().toISOString(),
+      totalUsuarios,
+      porPlano,
+      storageTotalUsadoGB: (storageTotalUsado / (1024 ** 3)).toFixed(2),
+      receitaMensalEstimada: receitaMensal.toFixed(2),
+    });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
