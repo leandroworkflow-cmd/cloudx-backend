@@ -345,6 +345,7 @@ footer{background:var(--bg-deep);padding:40px 5%;text-align:center;border-top:1p
       <a href="#planos">Planos</a>
       <a href="#beneficios">Benefícios</a>
       <a href="#como-funciona">Como funciona</a>
+      <a href="#contato">Contato</a>
     </div>
     <div class="nav-cta">
       <button class="btn btn-outline" onclick="abrirAuth('login')">Entrar</button>
@@ -601,6 +602,104 @@ footer{background:var(--bg-deep);padding:40px 5%;text-align:center;border-top:1p
   <p>10 GB grátis por 1 ano para os 200 primeiros. Sem cartão de crédito.</p>
   <button class="btn btn-primary btn-lg" onclick="abrirAuth('cadastro')">🚀 Criar conta grátis</button>
 </div>
+<!-- CONTATO / LEAD -->
+<style>
+  .contato-section{padding:80px 5%;max-width:640px;margin:0 auto;}
+  .contato-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:40px;box-shadow:var(--shadow);}
+  .contato-box .section-label{color:#caa8ff;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
+  .contato-box h2{font-size:clamp(24px,3vw,32px);font-weight:800;color:#fff;margin-bottom:10px;letter-spacing:-0.5px;}
+  .contato-box p.sub{color:var(--muted);margin-bottom:28px;font-size:15px;}
+  .contato-field{margin-bottom:16px;}
+  .contato-field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;}
+  .contato-field input,.contato-field textarea{
+    width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);
+    background:rgba(255,255,255,0.04);color:var(--text);font-family:inherit;font-size:14px;
+    outline:none;transition:border-color .15s;
+  }
+  .contato-field input:focus,.contato-field textarea:focus{border-color:var(--primary);}
+  .contato-field textarea{resize:vertical;min-height:90px;}
+  .contato-submit{
+    width:100%;padding:14px;border-radius:11px;border:none;font-size:15px;font-weight:700;
+    background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;cursor:pointer;
+    margin-top:6px;transition:opacity .15s;
+  }
+  .contato-submit:hover{opacity:0.9;}
+  .contato-submit:disabled{opacity:0.5;cursor:not-allowed;}
+  .contato-msg{margin-top:14px;font-size:13px;text-align:center;display:none;}
+  .contato-msg.ok{color:var(--success);}
+  .contato-msg.erro{color:var(--danger);}
+</style>
+
+<div class="contato-section" id="contato">
+  <div class="contato-box">
+    <div class="section-label">Fale com a gente</div>
+    <h2>Ainda com dúvidas?</h2>
+    <p class="sub">Deixe seus dados que nossa equipe entra em contato pra te ajudar a escolher o melhor plano.</p>
+
+    <form id="formContato" onsubmit="return enviarLeadFormulario(event)">
+      <div class="contato-field">
+        <label for="lead-nome">Nome</label>
+        <input type="text" id="lead-nome" required placeholder="Seu nome completo">
+      </div>
+      <div class="contato-field">
+        <label for="lead-email">E-mail</label>
+        <input type="email" id="lead-email" required placeholder="voce@email.com">
+      </div>
+      <div class="contato-field">
+        <label for="lead-telefone">Telefone (opcional)</label>
+        <input type="tel" id="lead-telefone" placeholder="(00) 00000-0000">
+      </div>
+      <div class="contato-field">
+        <label for="lead-mensagem">Mensagem (opcional)</label>
+        <textarea id="lead-mensagem" placeholder="Conta um pouco do que você precisa..."></textarea>
+      </div>
+      <button type="submit" class="contato-submit" id="contatoBtn">Enviar mensagem</button>
+      <div class="contato-msg" id="contatoMsg"></div>
+    </form>
+  </div>
+</div>
+
+<script>
+async function enviarLeadFormulario(ev){
+  ev.preventDefault();
+  const btn = document.getElementById('contatoBtn');
+  const msg = document.getElementById('contatoMsg');
+  const nome = document.getElementById('lead-nome').value.trim();
+  const email = document.getElementById('lead-email').value.trim();
+  const telefone = document.getElementById('lead-telefone').value.trim();
+  const mensagem = document.getElementById('lead-mensagem').value.trim();
+
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+  msg.style.display = 'none';
+
+  try{
+    const resp = await fetch('https://cloudx-backend.vercel.app/api/leads', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ nome, email, telefone, mensagem, origem: 'organico' })
+    });
+    const data = await resp.json();
+
+    if(data.ok){
+      msg.textContent = '✅ Mensagem enviada! Vamos entrar em contato em breve.';
+      msg.className = 'contato-msg ok';
+      msg.style.display = 'block';
+      document.getElementById('formContato').reset();
+    } else {
+      throw new Error(data.erro || 'Erro desconhecido');
+    }
+  } catch(e){
+    msg.textContent = '❌ Não foi possível enviar. Tente novamente em instantes.';
+    msg.className = 'contato-msg erro';
+    msg.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enviar mensagem';
+  }
+  return false;
+}
+</script>
 
 <footer>
   <div class="footer-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="28" height="28" style="display:inline-block;vertical-align:middle;">
