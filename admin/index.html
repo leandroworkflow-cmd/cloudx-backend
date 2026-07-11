@@ -7,135 +7,278 @@
 <style>
   :root {
     --bg: #0b0b12;
+    --sidebar: #111119;
     --card: #15151f;
     --border: #262635;
     --purple: #7c5cff;
+    --purple-light: #9c85ff;
     --text: #e8e8f0;
     --muted: #8b8b9e;
     --green: #3ddc84;
     --red: #ff5c6c;
+    --yellow: #ffc857;
+    --blue: #5c9dff;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    padding: 40px;
+    display: flex;
+    min-height: 100vh;
   }
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 220px;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    flex-shrink: 0;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 24px 8px;
+    font-weight: 700;
+    font-size: 18px;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--purple), var(--blue));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .nav-item.active { background: rgba(124,92,255,0.15); color: var(--purple-light); font-weight: 600; }
+
+  /* ── Main content ── */
+  .main { flex: 1; padding: 32px 40px; overflow-x: hidden; }
   header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 32px;
+    margin-bottom: 28px;
   }
-  h1 { font-size: 24px; font-weight: 700; }
+  h1 { font-size: 22px; font-weight: 700; }
   .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  button {
+  button.refresh {
     background: var(--purple);
     color: white;
     border: none;
-    padding: 10px 20px;
+    padding: 9px 18px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
   }
-  button:hover { opacity: 0.9; }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  .card .label {
-    color: var(--muted);
-    font-size: 13px;
-    margin-bottom: 8px;
-  }
-  .card .value {
-    font-size: 28px;
-    font-weight: 700;
-  }
-  .planos {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  .planos h2 { font-size: 16px; margin-bottom: 16px; }
-  .plano-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 14px;
-  }
-  .plano-row:last-child { border-bottom: none; }
+  button.refresh:hover { opacity: 0.9; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+  .card .label { color: var(--muted); font-size: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .card .value { font-size: 26px; font-weight: 700; }
+  .card .delta { font-size: 12px; color: var(--green); margin-top: 4px; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .panel h2 { font-size: 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  .stat-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .stat-row:last-child { border-bottom: none; }
+  .badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge.novo { background: rgba(92,157,255,0.15); color: var(--blue); }
+  .badge.em_conversa { background: rgba(255,200,87,0.15); color: var(--yellow); }
+  .badge.qualificado { background: rgba(124,92,255,0.15); color: var(--purple-light); }
+  .badge.convertido { background: rgba(61,220,132,0.15); color: var(--green); }
+  .badge.perdido { background: rgba(255,92,108,0.15); color: var(--red); }
+
   .erro {
     color: var(--red);
     background: rgba(255,92,108,0.1);
     border: 1px solid var(--red);
-    padding: 16px;
+    padding: 14px 16px;
     border-radius: 8px;
     margin-bottom: 20px;
+    font-size: 13px;
   }
-  .loading { color: var(--muted); font-size: 14px; }
-  footer {
-    margin-top: 32px;
-    color: var(--muted);
-    font-size: 12px;
-  }
+  .vazio { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 12px; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  svg.donut { display: block; margin: 0 auto; }
 </style>
 </head>
 <body>
 
-<header>
-  <div>
-    <h1>Dashboard — CloudX</h1>
-    <p class="subtitle" id="status">Carregando dados reais...</p>
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">☁️</div>
+    CloudX
   </div>
-  <button onclick="carregarDados()">↻ Atualizar</button>
-</header>
-
-<div id="erroBox"></div>
-
-<div class="grid" id="cards" style="display:none">
-  <div class="card">
-    <div class="label">Total de usuários</div>
-    <div class="value" id="totalUsuarios">—</div>
-  </div>
-  <div class="card">
-    <div class="label">Armazenamento usado</div>
-    <div class="value" id="storageTotal">—</div>
-  </div>
-  <div class="card">
-    <div class="label">Receita mensal estimada</div>
-    <div class="value" id="receitaMensal">—</div>
-  </div>
+  <div class="nav-item active" data-tab="dashboard">📊 Dashboard</div>
+  <div class="nav-item" data-tab="crm">👥 Leads / CRM</div>
 </div>
 
-<div class="planos" id="planosBox" style="display:none">
-  <h2>Usuários por plano</h2>
-  <div id="planosLista"></div>
-</div>
+<div class="main">
 
-<footer id="atualizadoEm"></footer>
+  <!-- ===== TAB: DASHBOARD GERAL ===== -->
+  <div class="tab-content active" id="tab-dashboard">
+    <header>
+      <div>
+        <h1>Dashboard — CloudX</h1>
+        <p class="subtitle" id="status">Carregando dados reais...</p>
+      </div>
+      <button class="refresh" onclick="carregarDados()">↻ Atualizar</button>
+    </header>
+
+    <div id="erroBox"></div>
+
+    <div class="grid" id="cards" style="display:none">
+      <div class="card">
+        <div class="label">Total de usuários</div>
+        <div class="value" id="totalUsuarios">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Armazenamento usado</div>
+        <div class="value" id="storageTotal">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Receita mensal estimada</div>
+        <div class="value" id="receitaMensal">—</div>
+      </div>
+    </div>
+
+    <div class="panel" id="planosBox" style="display:none">
+      <h2>Usuários por plano</h2>
+      <div id="planosLista"></div>
+    </div>
+
+    <footer id="atualizadoEm"></footer>
+  </div>
+
+  <!-- ===== TAB: CRM / LEADS ===== -->
+  <div class="tab-content" id="tab-crm">
+    <header>
+      <div>
+        <h1>Leads / CRM</h1>
+        <p class="subtitle">Dados reais da tabela <code>leads</code> no Supabase</p>
+      </div>
+      <button class="refresh" onclick="carregarDados()">↻ Atualizar</button>
+    </header>
+
+    <div class="grid" id="crmCards" style="display:none">
+      <div class="card">
+        <div class="label">Total de leads</div>
+        <div class="value" id="totalLeads">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Convertidos</div>
+        <div class="value" id="leadsConvertidos">—</div>
+        <div class="delta" id="taxaConversao"></div>
+      </div>
+      <div class="card">
+        <div class="label">Score médio</div>
+        <div class="value" id="scoreMedio">—</div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="panel">
+        <h2>📈 Leads por status</h2>
+        <div id="donutBox"></div>
+      </div>
+      <div class="panel">
+        <h2>🌐 Origem dos leads</h2>
+        <div id="origemLista"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
 
 <script>
-  // URL do seu próprio backend — já publicado no Vercel
   const API_URL = 'https://cloudx-backend.vercel.app/dashboard/stats';
+  let ultimoDado = null;
+
+  // ── Navegação entre abas ──
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      item.classList.add('active');
+      document.getElementById('tab-' + item.dataset.tab).classList.add('active');
+    });
+  });
+
+  const CORES_STATUS = {
+    novo: '#5c9dff',
+    em_conversa: '#ffc857',
+    qualificado: '#9c85ff',
+    convertido: '#3ddc84',
+    perdido: '#ff5c6c',
+  };
+  const NOMES_STATUS = {
+    novo: 'Novo', em_conversa: 'Em conversa', qualificado: 'Qualificado',
+    convertido: 'Convertido', perdido: 'Perdido',
+  };
+  const NOMES_PLANO = { free: 'Free', free_fundador: 'Free Fundador', basico: 'Básico', essencial: 'Essencial', plus: 'Plus', premium: 'Premium' };
+
+  function desenharDonut(porStatus, total) {
+    const box = document.getElementById('donutBox');
+    if (total === 0) { box.innerHTML = '<div class="vazio">Nenhum lead cadastrado ainda</div>'; return; }
+
+    const raio = 60, centro = 80, circunferencia = 2 * Math.PI * raio;
+    let offset = 0;
+    let paths = '';
+    Object.entries(porStatus).forEach(([status, qtd]) => {
+      if (qtd === 0) return;
+      const fracao = qtd / total;
+      const tamanho = fracao * circunferencia;
+      paths += `<circle cx="${centro}" cy="${centro}" r="${raio}" fill="none" stroke="${CORES_STATUS[status]}"
+        stroke-width="24" stroke-dasharray="${tamanho} ${circunferencia - tamanho}"
+        stroke-dashoffset="${-offset}" transform="rotate(-90 ${centro} ${centro})" />`;
+      offset += tamanho;
+    });
+
+    let legenda = '';
+    Object.entries(porStatus).forEach(([status, qtd]) => {
+      legenda += `<div class="stat-row"><span><span class="badge ${status}">${NOMES_STATUS[status]}</span></span><span>${qtd}</span></div>`;
+    });
+
+    box.innerHTML = `
+      <svg class="donut" width="160" height="160" viewBox="0 0 160 160">${paths}</svg>
+      <div style="margin-top:16px">${legenda}</div>
+    `;
+  }
+
+  function preencherOrigem(porOrigem, total) {
+    const box = document.getElementById('origemLista');
+    if (total === 0) { box.innerHTML = '<div class="vazio">Sem dados de origem ainda</div>'; return; }
+    let html = '';
+    Object.entries(porOrigem).forEach(([origem, qtd]) => {
+      const pct = Math.round((qtd / total) * 100);
+      html += `<div class="stat-row"><span style="text-transform:capitalize">${origem}</span><span>${pct}% (${qtd})</span></div>`;
+    });
+    box.innerHTML = html;
+  }
 
   async function carregarDados() {
     const status = document.getElementById('status');
     const erroBox = document.getElementById('erroBox');
-    const cards = document.getElementById('cards');
-    const planosBox = document.getElementById('planosBox');
 
     status.textContent = 'Carregando dados reais...';
     erroBox.innerHTML = '';
@@ -143,28 +286,39 @@
     try {
       const res = await fetch(API_URL);
       const dados = await res.json();
-
       if (!dados.ok) throw new Error(dados.erro || 'Erro desconhecido');
+      ultimoDado = dados;
 
+      // ── Dashboard geral ──
       document.getElementById('totalUsuarios').textContent = dados.totalUsuarios;
       document.getElementById('storageTotal').textContent = dados.storageTotalUsadoGB + ' GB';
       document.getElementById('receitaMensal').textContent = 'R$ ' + dados.receitaMensalEstimada;
 
       const planosLista = document.getElementById('planosLista');
       planosLista.innerHTML = '';
-      const nomes = { free: 'Free', basico: 'Básico', pro: 'Pro', business: 'Business' };
       Object.entries(dados.porPlano).forEach(([plano, qtd]) => {
         const row = document.createElement('div');
-        row.className = 'plano-row';
-        row.innerHTML = `<span>${nomes[plano] || plano}</span><span>${qtd}</span>`;
+        row.className = 'stat-row';
+        row.innerHTML = `<span>${NOMES_PLANO[plano] || plano}</span><span>${qtd}</span>`;
         planosLista.appendChild(row);
       });
 
-      cards.style.display = 'grid';
-      planosBox.style.display = 'block';
+      document.getElementById('cards').style.display = 'grid';
+      document.getElementById('planosBox').style.display = 'block';
       status.textContent = 'Dados atualizados';
       document.getElementById('atualizadoEm').textContent =
         'Última atualização: ' + new Date(dados.atualizadoEm).toLocaleString('pt-BR');
+
+      // ── CRM / Leads ──
+      const leads = dados.leads || { total: 0, porStatus: {}, porOrigem: {}, scoreMedio: 0, taxaConversao: 0 };
+      document.getElementById('totalLeads').textContent = leads.total;
+      document.getElementById('leadsConvertidos').textContent = leads.porStatus.convertido || 0;
+      document.getElementById('taxaConversao').textContent = 'Taxa: ' + leads.taxaConversao + '%';
+      document.getElementById('scoreMedio').textContent = leads.scoreMedio;
+      document.getElementById('crmCards').style.display = 'grid';
+
+      desenharDonut(leads.porStatus, leads.total);
+      preencherOrigem(leads.porOrigem, leads.total);
 
     } catch (e) {
       erroBox.innerHTML = `<div class="erro">❌ Erro ao carregar dados: ${e.message}</div>`;
