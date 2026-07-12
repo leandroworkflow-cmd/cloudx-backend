@@ -1144,5 +1144,178 @@ if('serviceWorker' in navigator){
   });
 }
 </script>
+<!-- WIDGET DE CHATBOT COM IA -->
+<style>
+  #cx-chat-bubble {
+    position: fixed; bottom: 24px; right: 24px; width: 60px; height: 60px;
+    border-radius: 50%; background: linear-gradient(135deg,var(--primary),var(--secondary));
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(108,76,241,0.4); z-index: 9998; font-size: 26px;
+    transition: transform .15s;
+  }
+  #cx-chat-bubble:hover { transform: scale(1.06); }
+  #cx-chat-window {
+    position: fixed; bottom: 96px; right: 24px; width: 360px; max-width: calc(100vw - 32px);
+    height: 480px; max-height: calc(100vh - 140px); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    display: none; flex-direction: column; overflow: hidden; z-index: 9999;
+  }
+  #cx-chat-window.aberto { display: flex; }
+  #cx-chat-header {
+    background: linear-gradient(135deg,var(--primary),var(--secondary)); padding: 16px 18px;
+    display: flex; align-items: center; justify-content: space-between; color: #fff;
+  }
+  #cx-chat-header .titulo { font-weight: 700; font-size: 15px; }
+  #cx-chat-header .status { font-size: 11px; opacity: 0.85; }
+  #cx-chat-close { cursor: pointer; font-size: 18px; opacity: 0.85; background: none; border: none; color: #fff; }
+  #cx-chat-close:hover { opacity: 1; }
+  #cx-chat-messages {
+    flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .cx-msg { max-width: 82%; padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
+  .cx-msg.bot { background: rgba(255,255,255,0.06); color: var(--text); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .cx-msg.user { background: var(--primary); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .cx-msg.digitando { display: flex; gap: 4px; align-items: center; }
+  .cx-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: cx-pulse 1.2s infinite; }
+  .cx-dot:nth-child(2) { animation-delay: 0.2s; }
+  .cx-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes cx-pulse { 0%,60%,100%{opacity:0.3} 30%{opacity:1} }
+  #cx-chat-input-area { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  #cx-chat-input {
+    flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; resize: none;
+  }
+  #cx-chat-input:focus { border-color: var(--primary); }
+  #cx-chat-send {
+    background: var(--primary); border: none; color: #fff; width: 40px; height: 40px;
+    border-radius: 10px; cursor: pointer; font-size: 16px; flex-shrink: 0;
+  }
+  #cx-chat-send:hover { opacity: 0.9; }
+  #cx-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+
+<div id="cx-chat-bubble" onclick="cxAlternarChat()">💬</div>
+
+<div id="cx-chat-window">
+  <div id="cx-chat-header">
+    <div>
+      <div class="titulo">CloudX Assistente</div>
+      <div class="status">● Online agora</div>
+    </div>
+    <button id="cx-chat-close" onclick="cxAlternarChat()">✕</button>
+  </div>
+  <div id="cx-chat-messages"></div>
+  <div id="cx-chat-input-area">
+    <textarea id="cx-chat-input" rows="1" placeholder="Digite sua mensagem..." onkeydown="cxTeclaEnter(event)"></textarea>
+    <button id="cx-chat-send" onclick="cxEnviarMensagem()">➤</button>
+  </div>
+</div>
+
+<script>
+  const CX_API_CHAT = 'https://cloudx-backend.vercel.app/api/chatbot';
+  const CX_API_LEAD = 'https://cloudx-backend.vercel.app/api/chatbot/lead';
+
+  let cxHistorico = [];
+  let cxAberto = false;
+  let cxLeadCapturado = false;
+
+  function cxAlternarChat() {
+    cxAberto = !cxAberto;
+    document.getElementById('cx-chat-window').classList.toggle('aberto', cxAberto);
+    if (cxAberto && cxHistorico.length === 0) {
+      cxAdicionarMensagem('bot', 'Oi! 👋 Sou o assistente da CloudX. Posso te ajudar a escolher o melhor plano ou tirar alguma dúvida. Como posso ajudar?');
+    }
+  }
+
+  function cxTeclaEnter(ev) {
+    if (ev.key === 'Enter' && !ev.shiftKey) {
+      ev.preventDefault();
+      cxEnviarMensagem();
+    }
+  }
+
+  function cxAdicionarMensagem(tipo, texto) {
+    const box = document.getElementById('cx-chat-messages');
+    const div = document.createElement('div');
+    div.className = 'cx-msg ' + tipo;
+    div.textContent = texto;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function cxMostrarDigitando() {
+    const box = document.getElementById('cx-chat-messages');
+    const div = document.createElement('div');
+    div.className = 'cx-msg bot digitando';
+    div.id = 'cx-digitando';
+    div.innerHTML = '<div class="cx-dot"></div><div class="cx-dot"></div><div class="cx-dot"></div>';
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function cxRemoverDigitando() {
+    const el = document.getElementById('cx-digitando');
+    if (el) el.remove();
+  }
+
+  // Deteccao simples: se a mensagem parecer conter nome + email, tenta capturar como lead
+  function cxTentarCapturarLead(textoUsuario) {
+    if (cxLeadCapturado) return;
+    const emailMatch = textoUsuario.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    if (!emailMatch) return;
+
+    const email = emailMatch[0];
+    // Usa o texto antes do email como possivel nome, ou pede generico
+    const nome = textoUsuario.replace(email, '').replace(/[^\p{L}\s]/gu, '').trim().slice(0, 60) || 'Visitante do chat';
+
+    cxLeadCapturado = true;
+    fetch(CX_API_LEAD, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome,
+        email,
+        mensagem: 'Conversa via chatbot: ' + cxHistorico.map(m => m.content).join(' | ').slice(0, 500),
+      }),
+    }).catch(() => {});
+  }
+
+  async function cxEnviarMensagem() {
+    const input = document.getElementById('cx-chat-input');
+    const texto = input.value.trim();
+    if (!texto) return;
+
+    input.value = '';
+    document.getElementById('cx-chat-send').disabled = true;
+
+    cxAdicionarMensagem('user', texto);
+    cxHistorico.push({ role: 'user', content: texto });
+    cxTentarCapturarLead(texto);
+
+    cxMostrarDigitando();
+
+    try {
+      const resp = await fetch(CX_API_CHAT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagens: cxHistorico }),
+      });
+      const data = await resp.json();
+      cxRemoverDigitando();
+
+      if (data.ok) {
+        cxAdicionarMensagem('bot', data.resposta);
+        cxHistorico.push({ role: 'assistant', content: data.resposta });
+      } else {
+        cxAdicionarMensagem('bot', 'Desculpa, tive um problema para responder. Tenta de novo?');
+      }
+    } catch (e) {
+      cxRemoverDigitando();
+      cxAdicionarMensagem('bot', 'Erro de conexão. Verifica sua internet e tenta de novo.');
+    }
+
+    document.getElementById('cx-chat-send').disabled = false;
+  }
+</script>
 </body>
 </html>

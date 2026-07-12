@@ -405,3 +405,79 @@ app.delete('/api/campanhas/:id', async (req, res) => {
   if (error) return res.status(500).json({ erro: error.message });
   res.json({ ok: true });
 });
+
+// ============================================
+// CHATBOT COM IA (Groq)
+// ============================================
+
+const SYSTEM_PROMPT_CLOUDX = `Você é o assistente virtual da CloudX, um serviço de armazenamento em nuvem no Brasil.
+
+INFORMAÇÕES SOBRE OS PLANOS:
+- Free: R$ 0/ano, 1 GB de armazenamento
+- Free Fundador: R$ 0, 10 GB por 1 ano (promoção limitada aos 200 primeiros cadastrados)
+- Básico: R$ 4,99/mês, 30 GB
+- Essencial: R$ 9,99/mês, 100 GB
+- Plus: R$ 29,99/mês, 300 GB
+- Premium: R$ 49,99/mês, 1 TB (1024 GB)
+
+REGRAS DE COMPORTAMENTO:
+- Seja breve, direto e simpático. Respostas de no máximo 3-4 frases.
+- Responda sempre em português do Brasil.
+- Se o usuário demonstrar interesse real (perguntar sobre preço, querer assinar, pedir contato humano), pergunte o nome e e-mail dele educadamente para que a equipe entre em contato.
+- Não invente informações que não foram passadas aqui. Se não souber algo, diga que vai encaminhar para a equipe humana.
+- Nunca peça senha, dados de cartão de crédito, ou informações sensíveis.`;
+
+async function chamarGroq(mensagens) {
+  const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'system', content: SYSTEM_PROMPT_CLOUDX }, ...mensagens],
+      temperature: 0.6,
+      max_tokens: 300,
+    }),
+  });
+
+  if (!resp.ok) {
+    const erro = await resp.text();
+    throw new Error(`Groq API erro: ${resp.status} - ${erro}`);
+  }
+
+  const data = await resp.json();
+  return data.choices[0].message.content;
+}
+
+app.post('/api/chatbot', async (req, res) => {
+  try {
+    const { mensagens } = req.body;
+    if (!mensagens || !Array.isArray(mensagens) || mensagens.length === 0) {
+      return res.status(400).json({ erro: 'Envie ao menos uma mensagem' });
+    }
+
+    const resposta = await chamarGroq(mensagens);
+    res.json({ ok: true, resposta });
+  } catch (e) {
+    console.error('Erro no chatbot:', e.message);
+    res.status(500).json({ erro: 'Não foi possível gerar resposta agora. Tente novamente.' });
+  }
+});
+
+// Captura o lead direto da conversa do chatbot (quando o usuário deixa nome/email no chat)
+app.post('/api/chatbot/lead', async (req, res) => {
+  const { nome, email, telefone, mensagem } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Nome obrigatorio' });
+  const db = getDB();
+  const { data, error } = await db.from('leads').insert({
+    nome, email, telefone,
+    origem: 'chat',
+    mensagem: mensagem || 'Lead capturado via chatbot do site',
+    status: 'novo',
+    score: 30, // leads via chat já demonstraram interesse ativo, entram com score maior
+  }).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, lead: data });
+});
