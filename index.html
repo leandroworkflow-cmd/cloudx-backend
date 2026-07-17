@@ -1,1321 +1,483 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CloudX — Sua nuvem. Seus arquivos. Em qualquer lugar.</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='50,2 98,27 98,73 50,98 2,73 2,27' fill='%236C4CF1'/%3E%3Cpolygon points='50,2 98,27 98,73 50,98 2,73 2,27' fill='none' stroke='%238B5CF6' stroke-width='2'/%3E%3Cpath d='M62 28 Q30 28 30 50 Q30 72 62 72' stroke='white' stroke-width='7' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='63' cy='28' r='7' fill='white'/%3E%3Ccircle cx='63' cy='72' r='7' fill='white'/%3E%3C/svg%3E">
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1a0f3e">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="CloudX">
-  <link rel="apple-touch-icon" href="/icon.svg">
-  <meta name="mobile-web-app-capable" content="yes">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<style>
-:root{
-  --primary:#6C4CF1;--primary-dark:#4B35C9;--secondary:#8B5CF6;
-  --bg:#0b0720;--bg-deep:#06040f;--white:#fff;--text:#F5F3FF;--muted:#A99FD6;
-  --border:rgba(139,92,246,0.18);--surface:#150c33;--danger:#EF4444;--success:#10B981;
-  --radius:14px;--shadow:0 4px 28px rgba(108,76,241,0.25);
-}
-*{box-sizing:border-box;margin:0;padding:0;}
-html{scroll-behavior:smooth;}
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;
-  background-image:radial-gradient(circle at 15% 0%, rgba(139,92,246,0.18), transparent 45%),
-                    radial-gradient(circle at 85% 15%, rgba(108,76,241,0.16), transparent 40%),
-                    radial-gradient(circle at 50% 80%, rgba(91,33,182,0.12), transparent 50%);
-  background-attachment:fixed;
-}
-a{text-decoration:none;color:inherit;}
+const express = require('express');
+const multer  = require('multer');
+const cors    = require('cors');
+const { createClient } = require('@supabase/supabase-js');
+const mp      = require('../mercadopago');
 
-/* NAV */
-nav{background:rgba(11,7,32,0.85);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;padding:0 5%;}
-.nav-inner{max-width:1100px;margin:0 auto;height:64px;display:flex;align-items:center;justify-content:space-between;}
-.nav-logo{font-size:22px;font-weight:800;color:#fff;display:flex;align-items:center;gap:8px;}
-.nav-logo .cloud{font-size:26px;}
-.nav-links{display:flex;gap:32px;font-size:14px;font-weight:500;color:var(--muted);}
-.nav-links a:hover{color:#fff;}
-.nav-cta{display:flex;gap:10px;}
-.btn{padding:10px 22px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:'Inter',sans-serif;}
-.btn-outline{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,0.25);}
-.btn-outline:hover{background:rgba(255,255,255,0.08);border-color:#fff;}
-.btn-primary{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;}
-.btn-primary:hover{box-shadow:0 4px 22px rgba(139,92,246,0.5);transform:translateY(-1px);}
-.btn-lg{padding:14px 32px;font-size:16px;border-radius:11px;}
-.btn-ghost-lg{background:rgba(255,255,255,0.06);color:#fff;border:2px solid rgba(255,255,255,0.2);padding:14px 32px;font-size:16px;border-radius:11px;}
-.btn-ghost-lg:hover{border-color:#fff;background:rgba(255,255,255,0.1);}
+const app = express();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
 
-/* HERO */
-.hero-wrap{max-width:1100px;margin:0 auto;padding:80px 5% 40px;display:grid;grid-template-columns:1.1fr 0.9fr;gap:40px;align-items:center;}
-.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(139,92,246,0.15);color:#caa8ff;font-size:13px;font-weight:600;padding:7px 18px;border-radius:50px;margin-bottom:28px;border:1px solid rgba(139,92,246,0.35);}
-.hero h1{font-size:clamp(34px,4.6vw,56px);font-weight:900;line-height:1.12;color:#fff;margin-bottom:20px;letter-spacing:-1.5px;}
-.hero h1 span{background:linear-gradient(135deg,#caa8ff,#8B5CF6);-webkit-background-clip:text;background-clip:text;color:transparent;}
-.hero p{font-size:18px;color:var(--muted);max-width:480px;margin:0 0 36px;font-weight:400;}
-.hero-btns{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:48px;}
-.hero-stats{display:flex;gap:32px;flex-wrap:wrap;}
-.stat{text-align:left;}
-.stat-num{font-size:26px;font-weight:800;color:#fff;}
-.stat-label{font-size:13px;color:var(--muted);font-weight:500;}
+app.use(cors({ origin: '*' }));
+app.use(express.json());
 
-/* HERO ART (ilustração original, inspirada na referência) */
-.hero-art{position:relative;display:flex;align-items:center;justify-content:center;}
-.hero-art svg{width:100%;max-width:380px;filter:drop-shadow(0 20px 60px rgba(108,76,241,0.45));}
+const getDB = () => createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
-/* DASHBOARD PREVIEW */
-.preview-wrap{max-width:900px;margin:0 auto 90px;padding:0 5%;}
-.preview-frame{background:var(--surface);border-radius:20px;box-shadow:0 20px 80px rgba(108,76,241,0.25),0 4px 20px rgba(0,0,0,0.3);overflow:hidden;border:1px solid var(--border);}
-.preview-topbar{background:#06040f;height:40px;display:flex;align-items:center;padding:0 16px;gap:8px;}
-.preview-dot{width:12px;height:12px;border-radius:50%;}
-.preview-url{flex:1;background:rgba(255,255,255,0.06);height:24px;border-radius:6px;margin:0 16px;display:flex;align-items:center;padding:0 10px;}
-.preview-url span{font-size:11px;color:rgba(255,255,255,0.4);font-family:monospace;}
-.preview-body{display:grid;grid-template-columns:200px 1fr;min-height:300px;}
-.preview-sidebar{background:#100a28;border-right:1px solid var(--border);padding:16px 12px;}
-.preview-nav-item{padding:8px 10px;border-radius:7px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;margin-bottom:2px;}
-.preview-nav-item.active{background:rgba(139,92,246,0.18);color:#caa8ff;font-weight:600;}
-.preview-storage{margin-top:20px;background:#150c33;border-radius:10px;padding:12px;border:1px solid var(--border);}
-.preview-storage-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
-.preview-storage-info{font-size:11px;color:#fff;font-weight:600;margin-bottom:6px;}
-.preview-bar{height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;}
-.preview-bar-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--secondary));width:35%;border-radius:3px;}
-.preview-content{padding:20px;background:#0e0826;}
-.preview-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
-.preview-title{font-size:15px;font-weight:700;color:#fff;}
-.preview-btns{display:flex;gap:6px;}
-.preview-btn{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;}
-.preview-btn.p{background:var(--primary);color:#fff;}
-.preview-btn.s{background:rgba(255,255,255,0.08);color:var(--muted);}
-.preview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
-.preview-file{background:#150c33;border:1px solid var(--border);border-radius:8px;padding:12px 8px;text-align:center;}
-.preview-file-icon{font-size:22px;margin-bottom:4px;}
-.preview-file-name{font-size:10px;color:var(--muted);font-weight:500;}
+// ── PLANOS E LIMITES (em bytes) ──
+const PLANOS = {
+  free:           1   * 1024 * 1024 * 1024,   // 1 GB (padrão, após 200 vagas ou expirar promo)
+  free_fundador:  10  * 1024 * 1024 * 1024,   // 10 GB — promo dos 30 primeiros, válida 1 ano
+  basico:         30  * 1024 * 1024 * 1024,   // 30 GB
+  essencial:      100 * 1024 * 1024 * 1024,   // 100 GB
+  plus:           300 * 1024 * 1024 * 1024,   // 300 GB
+  premium:        1024 * 1024 * 1024 * 1024,  // 1 TB
+};
 
-/* SECTION (genérico) */
-.section{max-width:1100px;margin:0 auto;padding:70px 5%;}
-.section-label{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#a07aff;margin-bottom:12px;}
-.section-title{font-size:clamp(28px,4vw,42px);font-weight:800;color:#fff;margin-bottom:14px;letter-spacing:-1px;}
-.section-sub{font-size:17px;color:var(--muted);max-width:520px;}
+const LIMITE_VAGAS_FUNDADOR = 30;
 
-/* PLANOS — agora logo após o hero, com destaque visual */
-.plans-section{padding:30px 5% 80px;}
-.plans-inner{max-width:1100px;margin:0 auto;text-align:center;}
-.plans-inner .section-label{justify-self:center;}
-.plans-inner .section-title{margin-left:auto;margin-right:auto;}
-.plans-inner .section-sub{margin-left:auto;margin-right:auto;}
-.plans-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-top:48px;}
-.plan-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:30px 22px;transition:all .2s;position:relative;text-align:left;}
-.plan-card:hover{border-color:rgba(139,92,246,0.4);transform:translateY(-3px);}
-.plan-card.featured{background:linear-gradient(160deg,var(--primary),#5a2fd6);border-color:transparent;box-shadow:0 12px 40px rgba(108,76,241,0.45);}
-.plan-card.free{border:1px dashed rgba(160,122,255,0.5);background:rgba(139,92,246,0.06);}
-
-/* ── CONTADOR CIRCULAR DE VAGAS (200 PRIMEIROS) ── */
-.plan-counter-circle{
-  position:absolute;top:-26px;left:-26px;width:88px;height:88px;border-radius:50%;
-  background:linear-gradient(135deg,var(--primary),var(--secondary));
-  border:4px solid var(--bg);box-shadow:0 8px 24px rgba(108,76,241,0.55);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  z-index:5;animation:pulseCounter 2.4s ease-in-out infinite;
-}
-.plan-counter-circle .num{font-size:24px;font-weight:900;color:#fff;line-height:1;}
-.plan-counter-circle .lbl{font-size:9px;font-weight:700;color:rgba(255,255,255,0.85);text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;}
-@keyframes pulseCounter{
-  0%,100%{transform:scale(1);}
-  50%{transform:scale(1.06);}
-}
-@media(max-width:480px){
-  .plan-counter-circle{width:68px;height:68px;top:-20px;left:-20px;}
-  .plan-counter-circle .num{font-size:19px;}
+async function auth(req, res, next) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return res.status(401).json({ erro: 'Sem token' });
+  const db = getDB();
+  const { data, error } = await db.auth.getUser(token);
+  if (error || !data.user) return res.status(401).json({ erro: 'Token inválido' });
+  req.user = data.user;
+  req.db = db;
+  next();
 }
 
-.plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#F59E0B;color:#1a0f3e;font-size:11px;font-weight:700;padding:4px 16px;border-radius:50px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;}
-.plan-badge.free-badge{background:#34D399;}
-.plan-name{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px;}
-.plan-card.featured .plan-name{color:rgba(255,255,255,0.85);}
-.plan-price{font-size:36px;font-weight:900;color:#fff;letter-spacing:-1.5px;margin-bottom:4px;}
-.plan-price span{font-size:15px;font-weight:400;color:var(--muted);}
-.plan-card.featured .plan-price span{color:rgba(255,255,255,0.7);}
-.plan-storage{font-size:14px;color:var(--muted);margin-bottom:22px;}
-.plan-card.featured .plan-storage{color:rgba(255,255,255,0.75);}
-.plan-features{list-style:none;display:flex;flex-direction:column;gap:9px;margin-bottom:24px;}
-.plan-features li{font-size:13px;color:var(--muted);display:flex;align-items:flex-start;gap:8px;}
-.plan-features li::before{content:'✓';color:#34D399;font-weight:700;flex-shrink:0;}
-.plan-card.featured .plan-features li{color:rgba(255,255,255,0.92);}
-.btn-plan{width:100%;padding:12px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;border:1.5px solid rgba(255,255,255,0.2);background:transparent;color:#fff;font-family:'Inter',sans-serif;}
-.btn-plan:hover{background:rgba(255,255,255,0.08);}
-.plan-card.featured .btn-plan{background:#fff;color:var(--primary-dark);border-color:#fff;}
-.plan-card.featured .btn-plan:hover{background:#f0ecff;}
-.plans-footnote{margin-top:28px;font-size:13px;color:var(--muted);}
-
-/* CONVITE — abaixo dos planos */
-.invite-section{max-width:1100px;margin:0 auto;padding:0 5% 70px;}
-.invite-card{background:rgba(139,92,246,0.08);border:1px solid var(--border);border-radius:20px;padding:40px;display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap;}
-.invite-text h2{font-size:24px;font-weight:800;color:#fff;margin-bottom:8px;}
-.invite-text p{color:var(--muted);font-size:15px;}
-.invite-badge{background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:12px;padding:14px 22px;text-align:center;min-width:140px;}
-.invite-badge .num{font-size:32px;font-weight:900;color:#fff;}
-.invite-badge .label{font-size:12px;color:var(--muted);font-weight:600;}
-.btn-invite{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-weight:700;padding:13px 28px;border-radius:10px;cursor:pointer;border:none;font-size:14px;font-family:'Inter',sans-serif;transition:all .2s;}
-.btn-invite:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(108,76,241,0.4);}
-
-/* BENEFÍCIOS */
-.benefits-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-top:48px;}
-.benefit-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px 24px;transition:all .2s;}
-.benefit-card:hover{box-shadow:var(--shadow);transform:translateY(-2px);border-color:rgba(139,92,246,0.4);}
-.benefit-icon{font-size:32px;margin-bottom:14px;}
-.benefit-title{font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;}
-.benefit-text{font-size:14px;color:var(--muted);line-height:1.7;}
-
-/* ONBOARDING STEPS */
-.onboarding-section{max-width:1100px;margin:0 auto;padding:70px 5%;}
-.steps-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;margin-top:48px;position:relative;}
-.steps-grid::before{content:'';position:absolute;top:32px;left:10%;right:10%;height:2px;background:linear-gradient(90deg,var(--primary),var(--secondary));z-index:0;opacity:0.5;}
-.step{text-align:center;position:relative;z-index:1;}
-.step-num{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 4px 20px rgba(108,76,241,0.45);}
-.step-title{font-size:14px;font-weight:700;color:#fff;margin-bottom:6px;}
-.step-text{font-size:13px;color:var(--muted);}
-
-/* CTA FINAL */
-.cta-section{border-top:1px solid var(--border);padding:80px 5%;text-align:center;}
-.cta-section h2{font-size:clamp(28px,4vw,46px);font-weight:900;color:#fff;margin-bottom:14px;letter-spacing:-1px;}
-.cta-section p{font-size:17px;color:var(--muted);margin-bottom:36px;}
-
-/* FOOTER */
-footer{background:var(--bg-deep);padding:40px 5%;text-align:center;border-top:1px solid var(--border);}
-.footer-logo{font-size:20px;font-weight:800;color:#fff;margin-bottom:8px;}
-.footer-copy{font-size:13px;color:rgba(255,255,255,0.35);}
-
-/* MODAL AUTH */
-.auth-overlay{position:fixed;inset:0;background:rgba(6,4,15,0.7);backdrop-filter:blur(8px);z-index:1000;display:none;align-items:center;justify-content:center;padding:24px;}
-.auth-modal{background:#150c33;border:1px solid var(--border);border-radius:20px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.4);}
-.auth-modal-title{font-size:24px;font-weight:800;color:#fff;margin-bottom:6px;}
-.auth-modal-sub{font-size:14px;color:var(--muted);margin-bottom:28px;}
-.field{margin-bottom:16px;}
-.field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;}
-.field input{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s;color:#fff;background:rgba(255,255,255,0.04);}
-.field input:focus{border-color:var(--primary);}
-.field input::placeholder{color:#6b6294;}
-.divider{display:flex;align-items:center;gap:12px;margin:14px 0;color:var(--muted);font-size:12px;}
-.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
-.btn-google-modal{width:100%;padding:12px;background:#fff;color:#1a0f3e;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:'Inter',sans-serif;transition:all .15s;}
-.btn-google-modal:hover{box-shadow:0 0 0 2px var(--primary);}
-.auth-switch{font-size:13px;color:var(--muted);text-align:center;margin-top:16px;cursor:pointer;}
-.auth-switch span{color:#caa8ff;font-weight:600;}
-.modal-close-btn{position:absolute;top:16px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);}
-
-/* DASHBOARD */
-#dashboard{display:none;min-height:100vh;background:var(--bg);}
-.dash-topbar{height:60px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;position:sticky;top:0;z-index:100;}
-.dash-logo{font-size:18px;font-weight:800;color:#fff;flex:1;display:flex;align-items:center;gap:8px;}
-.dash-email{font-size:13px;color:var(--muted);}
-.dash-btn{padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'Inter',sans-serif;transition:all .2s;}
-.dash-btn.up{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;}
-.dash-btn.up:hover{box-shadow:0 4px 16px rgba(108,76,241,0.4);}
-.dash-btn.out{background:transparent;color:var(--muted);border:1px solid var(--border);}
-.dash-btn.out:hover{color:var(--danger);border-color:var(--danger);}
-.dash-layout{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 60px);}
-.dash-sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px 14px;display:flex;flex-direction:column;gap:4px;}
-.dash-nav-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);padding:0 10px;margin:14px 0 4px;}
-.dash-nav-item{padding:9px 12px;border-radius:9px;font-size:14px;font-weight:500;cursor:pointer;color:var(--muted);transition:all .15s;display:flex;align-items:center;gap:10px;}
-.dash-nav-item:hover{background:rgba(255,255,255,0.05);color:#fff;}
-.dash-nav-item.active{background:rgba(139,92,246,0.18);color:#caa8ff;font-weight:600;}
-
-/* STORAGE CARD */
-.storage-card{margin-top:auto;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:16px;}
-.storage-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
-.storage-numbers{margin-bottom:8px;}
-.storage-used{font-size:16px;font-weight:700;color:#fff;}
-.storage-free{font-size:12px;color:var(--muted);margin-top:2px;}
-.storage-bar{height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:6px;}
-.storage-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--secondary));border-radius:3px;transition:width .5s;}
-.storage-fill.danger{background:linear-gradient(90deg,var(--danger),#f87171);}
-.storage-percent{font-size:11px;color:var(--muted);font-weight:600;text-align:right;}
-.storage-plan{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#caa8ff;margin-top:8px;}
-.btn-up-storage{width:100%;margin-top:10px;padding:9px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .2s;}
-.btn-up-storage:hover{box-shadow:0 4px 16px rgba(108,76,241,0.4);}
-
-/* INVITE CARD DASH */
-.invite-dash-card{background:rgba(139,92,246,0.1);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:12px;text-align:center;}
-.invite-dash-icon{font-size:24px;margin-bottom:6px;}
-.invite-dash-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;}
-.invite-dash-text{font-size:11px;color:var(--muted);margin-bottom:10px;}
-.btn-invite-dash{width:100%;padding:8px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;}
-
-/* DASH CONTENT */
-.dash-content{padding:28px;}
-.dash-header{display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;}
-.dash-title{font-size:20px;font-weight:800;color:#fff;flex:1;}
-.dash-action{padding:9px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'Inter',sans-serif;transition:all .2s;display:flex;align-items:center;gap:6px;}
-.dash-action.primary{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;}
-.dash-action.primary:hover{box-shadow:0 4px 16px rgba(108,76,241,0.4);}
-.dash-action.secondary{background:rgba(255,255,255,0.04);color:var(--muted);border:1px solid var(--border);}
-.dash-action.secondary:hover{color:#fff;border-color:var(--primary);}
-
-.upload-zone{border:2px dashed rgba(139,92,246,0.35);border-radius:14px;padding:36px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:24px;background:rgba(255,255,255,0.02);}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--primary);background:rgba(139,92,246,0.06);}
-.upload-zone-icon{font-size:36px;margin-bottom:10px;}
-.upload-zone-text{font-size:15px;font-weight:600;color:#fff;margin-bottom:4px;}
-.upload-zone-sub{font-size:13px;color:var(--muted);}
-
-.progress-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:none;}
-.progress-name{font-size:13px;font-weight:600;color:#fff;margin-bottom:8px;}
-.progress-bar{height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--secondary));transition:width .3s;}
-
-.files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;}
-.file-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 14px;cursor:pointer;transition:all .2s;position:relative;text-align:center;}
-.file-card:hover{box-shadow:0 4px 18px rgba(108,76,241,0.25);border-color:rgba(139,92,246,0.4);transform:translateY(-1px);}
-.file-card-icon{font-size:32px;margin-bottom:10px;}
-.file-card-name{font-size:12px;font-weight:600;word-break:break-word;color:#fff;margin-bottom:3px;line-height:1.3;}
-.file-card-size{font-size:11px;color:var(--muted);}
-.file-card-actions{position:absolute;top:8px;right:8px;display:flex;gap:3px;opacity:0;transition:opacity .15s;}
-.file-card:hover .file-card-actions{opacity:1;}
-.file-icon-btn{background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all .15s;}
-.file-icon-btn:hover{background:rgba(139,92,246,0.2);border-color:var(--primary);color:#caa8ff;}
-.file-icon-btn.del:hover{background:rgba(239,68,68,0.15);border-color:var(--danger);color:var(--danger);}
-
-.empty-state{text-align:center;padding:60px 20px;color:var(--muted);}
-.empty-icon{font-size:48px;margin-bottom:14px;opacity:0.5;}
-.empty-text{font-size:15px;font-weight:600;margin-bottom:6px;color:var(--muted);}
-.empty-sub{font-size:13px;color:#6b6294;}
-
-.breadcrumb{font-size:13px;color:var(--muted);margin-bottom:16px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
-.breadcrumb a{color:#caa8ff;cursor:pointer;font-weight:500;}
-.breadcrumb a:hover{text-decoration:underline;}
-
-/* MODAL PLANOS DASH */
-.plans-overlay{position:fixed;inset:0;background:rgba(6,4,15,0.7);backdrop-filter:blur(8px);z-index:1000;display:none;align-items:center;justify-content:center;padding:24px;}
-.plans-modal{background:#150c33;border:1px solid var(--border);border-radius:20px;padding:40px;width:100%;max-width:760px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.4);max-height:90vh;overflow-y:auto;}
-.plans-modal-title{font-size:22px;font-weight:800;color:#fff;margin-bottom:4px;}
-.plans-modal-sub{font-size:14px;color:var(--muted);margin-bottom:28px;}
-.plans-modal-close{position:absolute;top:16px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);}
-.plans-modal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-.plan-modal-card{border:2px solid var(--border);border-radius:12px;padding:20px 14px;text-align:center;transition:all .2s;position:relative;}
-.plan-modal-card:hover{border-color:rgba(139,92,246,0.5);}
-.plan-modal-card.featured{border-color:var(--primary);background:rgba(108,76,241,0.1);}
-.plan-modal-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:10px;font-weight:700;padding:3px 12px;border-radius:50px;letter-spacing:1px;white-space:nowrap;}
-.plan-modal-name{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px;}
-.plan-modal-price{font-size:26px;font-weight:900;color:#fff;margin-bottom:2px;}
-.plan-modal-price span{font-size:12px;font-weight:400;color:var(--muted);}
-.plan-modal-storage{font-size:13px;color:var(--muted);margin-bottom:16px;}
-.btn-plan-modal{width:100%;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:2px solid var(--border);background:transparent;color:#caa8ff;font-family:'Inter',sans-serif;transition:all .2s;}
-.btn-plan-modal:hover,.plan-modal-card.featured .btn-plan-modal{background:var(--primary);color:#fff;border-color:var(--primary);}
-
-/* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:#150c33;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:9999;opacity:0;transform:translateY(8px);transition:all .3s;pointer-events:none;font-weight:500;border:1px solid var(--border);}
-.toast.show{opacity:1;transform:translateY(0);}
-.toast.erro{background:var(--danger);border-color:var(--danger);}
-.toast.ok{background:var(--success);border-color:var(--success);}
-
-@media(max-width:900px){
-  .hero-wrap{grid-template-columns:1fr;text-align:center;}
-  .hero h1{margin-left:auto;margin-right:auto;}
-  .hero p{margin-left:auto;margin-right:auto;}
-  .hero-btns,.hero-stats{justify-content:center;}
-  .hero-art{order:-1;margin-bottom:20px;}
-  .plans-modal-grid{grid-template-columns:repeat(2,1fr);}
-}
-@media(max-width:768px){
-  .nav-links,.nav-cta .btn-outline{display:none;}
-  .steps-grid::before{display:none;}
-  .preview-body,.dash-layout{grid-template-columns:1fr;}
-  .preview-sidebar,.dash-sidebar{display:none;}
-  .plans-modal-grid{grid-template-columns:1fr;}
-  .invite-card{flex-direction:column;text-align:center;}
-}
-</style>
-</head>
-<body>
-
-<!-- ═══ LANDING PAGE ═══ -->
-<div id="landing">
-
-<nav>
-  <div class="nav-inner">
-    <div class="nav-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="36" height="36" style="display:inline-block;vertical-align:middle;">
-  <polygon points="50,2 98,27 98,73 50,98 2,73 2,27" fill="#6C4CF1"/>
-  <polygon points="50,2 98,27 98,73 50,98 2,73 2,27" fill="none" stroke="#8B5CF6" stroke-width="2"/>
-  <path d="M62 28 Q30 28 30 50 Q30 72 62 72" stroke="white" stroke-width="7" fill="none" stroke-linecap="round"/>
-  <circle cx="63" cy="28" r="7" fill="white"/>
-  <circle cx="63" cy="72" r="7" fill="white"/>
-</svg> CloudX</div>
-    <div class="nav-links">
-      <a href="#planos">Planos</a>
-      <a href="#beneficios">Benefícios</a>
-      <a href="#como-funciona">Como funciona</a>
-      <a href="#contato">Contato</a>
-    </div>
-    <div class="nav-cta">
-      <button class="btn btn-outline" onclick="abrirAuth('login')">Entrar</button>
-      <button class="btn btn-primary" onclick="abrirAuth('cadastro')">Começar grátis</button>
-    </div>
-  </div>
-</nav>
-
-<!-- HERO + ILUSTRAÇÃO -->
-<div class="hero-wrap">
-  <div class="hero">
-    <div class="hero-badge" id="promoBadge">✨ 10 GB grátis por 1 ano para os 200 primeiros</div>
-    <h1>Armazene seus arquivos<br><span>com segurança na nuvem.</span></h1>
-    <p>Fotos, vídeos, documentos e projetos sempre disponíveis, em qualquer dispositivo.</p>
-    <div class="hero-btns">
-      <button class="btn btn-primary btn-lg" onclick="abrirAuth('cadastro')">🚀 Começar grátis</button>
-      <button class="btn-ghost-lg btn" onclick="document.getElementById('planos').scrollIntoView({behavior:'smooth'})">💎 Conhecer planos</button>
-    </div>
-    <div class="hero-stats">
-      <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Seguro</div></div>
-      <div class="stat"><div class="stat-num">10 GB</div><div class="stat-label">Grátis*</div></div>
-      <div class="stat"><div class="stat-num">∞</div><div class="stat-label">Dispositivos</div></div>
-      <div class="stat"><div class="stat-num">24/7</div><div class="stat-label">Disponível</div></div>
-    </div>
-  </div>
-
-  <div class="hero-art">
-    <svg viewBox="0 0 380 420" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="glow" cx="50%" cy="35%" r="60%">
-          <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.35"/>
-          <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#8B5CF6"/>
-          <stop offset="100%" stop-color="#6C4CF1"/>
-        </linearGradient>
-        <linearGradient id="cardGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#8B5CF6"/>
-          <stop offset="100%" stop-color="#6C4CF1"/>
-        </linearGradient>
-      </defs>
-      <circle cx="190" cy="180" r="170" fill="url(#glow)"/>
-      <circle cx="190" cy="150" r="130" fill="none" stroke="#8B5CF6" stroke-opacity="0.3" stroke-width="1.5"/>
-
-      <!-- cloud -->
-      <g opacity="0.95">
-        <ellipse cx="290" cy="90" rx="38" ry="22" fill="#cdbdfb"/>
-        <ellipse cx="265" cy="98" rx="24" ry="16" fill="#cdbdfb"/>
-        <ellipse cx="315" cy="98" rx="22" ry="15" fill="#cdbdfb"/>
-      </g>
-
-      <!-- floating icons -->
-      <g>
-        <rect x="40" y="150" width="48" height="48" rx="12" fill="url(#cardGrad)"/>
-        <polygon points="58,164 58,184 78,174" fill="#fff"/>
-      </g>
-      <g>
-        <rect x="290" y="190" width="50" height="50" rx="12" fill="url(#cardGrad)"/>
-        <rect x="304" y="204" width="22" height="4" rx="2" fill="#fff"/>
-        <rect x="304" y="212" width="22" height="4" rx="2" fill="#fff"/>
-        <rect x="304" y="220" width="14" height="4" rx="2" fill="#fff"/>
-      </g>
-      <g>
-        <rect x="20" y="260" width="44" height="44" rx="11" fill="#fff" opacity="0.95"/>
-        <circle cx="32" cy="276" r="4" fill="#8B5CF6"/>
-        <path d="M24 292 L34 280 L42 288 L52 274" stroke="#8B5CF6" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-      </g>
-
-      <!-- person silhouette holding a tablet, simplified flat style -->
-      <g transform="translate(95,150)">
-        <ellipse cx="95" cy="245" rx="80" ry="14" fill="#000" opacity="0.18"/>
-        <path d="M20 240 Q10 140 60 100 Q95 75 130 100 Q180 140 170 240 Z" fill="url(#bodyGrad)"/>
-        <circle cx="95" cy="55" r="42" fill="#3a2a66"/>
-        <path d="M55 50 Q60 10 95 8 Q132 8 138 50 Q138 30 95 28 Q58 30 55 50 Z" fill="#2a1d4d"/>
-        <rect x="65" y="150" width="60" height="46" rx="6" fill="#e8e1fb"/>
-        <rect x="70" y="155" width="50" height="34" rx="3" fill="#fff"/>
-      </g>
-    </svg>
-  </div>
-</div>
-
-<!-- PLANOS — agora logo no topo, em destaque -->
-<div class="plans-section" id="planos">
-  <div class="plans-inner">
-    <div class="section-label">Planos</div>
-    <div class="section-title">Escolha o plano ideal para você.</div>
-    <div class="section-sub" style="margin:0 auto;">Sem cartão de crédito para o plano grátis. Cancele quando quiser.</div>
-    <div class="plans-grid">
-      <div class="plan-card free">
-        <div class="plan-counter-circle" id="vagasCircle">
-          <div class="num" id="vagasCircleNum">200</div>
-          <div class="lbl">vagas</div>
-        </div>
-        <div class="plan-badge free-badge">200 PRIMEIROS</div>
-        <div class="plan-name">Free</div>
-        <div class="plan-price">R$ 0<span>/ano</span></div>
-        <div class="plan-storage">10 GB por 1 ano — só para os 200 primeiros inscritos</div>
-        <ul class="plan-features">
-          <li>Upload de arquivos</li>
-          <li>Criação de pastas</li>
-          <li>Acesso web</li>
-        </ul>
-        <button class="btn-plan" onclick="abrirAuth('cadastro')">Garantir vaga</button>
-      </div>
-      <div class="plan-card">
-        <div class="plan-name">Básico</div>
-        <div class="plan-price">R$ 4<span>,99/mês</span></div>
-        <div class="plan-storage">30 GB de armazenamento</div>
-        <ul class="plan-features">
-          <li>Upload de arquivos</li>
-          <li>Criação de pastas</li>
-          <li>Acesso web</li>
-        </ul>
-        <button class="btn-plan" onclick="abrirAuth('cadastro')">Assinar Básico</button>
-      </div>
-      <div class="plan-card">
-        <div class="plan-name">Essencial</div>
-        <div class="plan-price">R$ 9<span>,99/mês</span></div>
-        <div class="plan-storage">100 GB de armazenamento</div>
-        <ul class="plan-features">
-          <li>Tudo do Básico</li>
-          <li>Mais armazenamento</li>
-          <li>Acesso em qualquer dispositivo</li>
-        </ul>
-        <button class="btn-plan" onclick="abrirAuth('cadastro')">Assinar Essencial</button>
-      </div>
-      <div class="plan-card featured">
-        <div class="plan-badge">MAIS ESCOLHIDO</div>
-        <div class="plan-name">Plus</div>
-        <div class="plan-price">R$ 29<span>,99/mês</span></div>
-        <div class="plan-storage">300 GB de armazenamento</div>
-        <ul class="plan-features">
-          <li>Tudo do Essencial</li>
-          <li>Prioridade de suporte</li>
-          <li>Ideal para projetos grandes</li>
-        </ul>
-        <button class="btn-plan" onclick="abrirAuth('cadastro')">Assinar Plus</button>
-      </div>
-      <div class="plan-card">
-        <div class="plan-name">Premium</div>
-        <div class="plan-price">R$ 49<span>,99/mês</span></div>
-        <div class="plan-storage">1 TB de armazenamento</div>
-        <ul class="plan-features">
-          <li>Tudo do Plus</li>
-          <li>Grande capacidade</li>
-          <li>Ideal para equipes</li>
-        </ul>
-        <button class="btn-plan" onclick="abrirAuth('cadastro')">Assinar Premium</button>
-      </div>
-    </div>
-    <div class="plans-footnote">Todos os planos pagos incluem upload ilimitado de arquivos e acesso 24/7.</div>
-  </div>
-</div>
-
-<!-- CONVITE -->
-<div class="invite-section">
-  <div class="invite-card">
-    <div class="invite-text">
-      <h2>🎁 Convide um amigo e ganhe 5 GB</h2>
-      <p>Seu amigo ganha 5 GB e você também. Mais espaço para o que importa.</p>
-    </div>
-    <div class="invite-badge">
-      <div class="num">+5 GB</div>
-      <div class="label">por convite</div>
-    </div>
-    <button class="btn-invite" onclick="abrirAuth('cadastro')">Convidar amigos</button>
-  </div>
-</div>
-
-<!-- DASHBOARD PREVIEW -->
-<div class="preview-wrap">
-  <div class="preview-frame">
-    <div class="preview-topbar">
-      <div class="preview-dot" style="background:#ff5f57"></div>
-      <div class="preview-dot" style="background:#febc2e"></div>
-      <div class="preview-dot" style="background:#28c840"></div>
-      <div class="preview-url"><span>cloudx-backend.vercel.app</span></div>
-    </div>
-    <div class="preview-body">
-      <div class="preview-sidebar">
-        <div class="preview-nav-item active">▦ Meus arquivos</div>
-        <div class="preview-nav-item">◈ Planos</div>
-        <div class="preview-storage">
-          <div class="preview-storage-label">Armazenamento</div>
-          <div class="preview-storage-info">350 MB utilizados<br><span style="font-size:10px;color:#6b6294">29,65 GB livres</span></div>
-          <div class="preview-bar"><div class="preview-bar-fill"></div></div>
-        </div>
-      </div>
-      <div class="preview-content">
-        <div class="preview-header">
-          <div class="preview-title">Meus arquivos</div>
-          <div class="preview-btns">
-            <div class="preview-btn s">📁 Nova pasta</div>
-            <div class="preview-btn p">⬆️ Upload</div>
-          </div>
-        </div>
-        <div class="preview-grid">
-          <div class="preview-file"><div class="preview-file-icon">📁</div><div class="preview-file-name">Projetos</div></div>
-          <div class="preview-file"><div class="preview-file-icon">🖼️</div><div class="preview-file-name">foto.jpg</div></div>
-          <div class="preview-file"><div class="preview-file-icon">📄</div><div class="preview-file-name">doc.pdf</div></div>
-          <div class="preview-file"><div class="preview-file-icon">🎬</div><div class="preview-file-name">video.mp4</div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- BENEFÍCIOS -->
-<div class="section" id="beneficios">
-  <div class="section-label">Por que CloudX?</div>
-  <div class="section-title">Tudo que você precisa,<br>num só lugar.</div>
-  <div class="section-sub">Simples, rápido e seguro. Feito para quem precisa de armazenamento sem complicação.</div>
-  <div class="benefits-grid">
-    <div class="benefit-card">
-      <div class="benefit-icon">☁️</div>
-      <div class="benefit-title">Armazenamento Seguro</div>
-      <div class="benefit-text">Seus arquivos protegidos com tecnologia moderna. Backups automáticos e criptografia.</div>
-    </div>
-    <div class="benefit-card">
-      <div class="benefit-icon">⚡</div>
-      <div class="benefit-title">Upload Rápido</div>
-      <div class="benefit-text">Envie documentos, fotos e vídeos em segundos. Arraste e solte — sem complicação.</div>
-    </div>
-    <div class="benefit-card">
-      <div class="benefit-icon">📁</div>
-      <div class="benefit-title">Organização Inteligente</div>
-      <div class="benefit-text">Crie pastas, organize por categorias e encontre o que precisa em segundos.</div>
-    </div>
-    <div class="benefit-card">
-      <div class="benefit-icon">🌎</div>
-      <div class="benefit-title">Acesso em Qualquer Lugar</div>
-      <div class="benefit-text">Computador, tablet ou smartphone. Seus arquivos sempre disponíveis, onde você estiver.</div>
-    </div>
-  </div>
-</div>
-
-<!-- COMO FUNCIONA -->
-<div class="onboarding-section" id="como-funciona">
-  <div class="section-label">Como funciona</div>
-  <div class="section-title">Em 5 passos simples.</div>
-  <div class="steps-grid">
-    <div class="step"><div class="step-num">☁️</div><div class="step-title">Bem-vindo</div><div class="step-text">Seu espaço pessoal na nuvem</div></div>
-    <div class="step"><div class="step-num">📁</div><div class="step-title">Organize</div><div class="step-text">Crie pastas e organize</div></div>
-    <div class="step"><div class="step-num">⚡</div><div class="step-title">Upload</div><div class="step-text">Envie qualquer arquivo</div></div>
-    <div class="step"><div class="step-num">🔒</div><div class="step-title">Segurança</div><div class="step-text">Acesse quando precisar</div></div>
-    <div class="step"><div class="step-num">🚀</div><div class="step-title">Pronto!</div><div class="step-text">Comece agora gratuitamente</div></div>
-  </div>
-</div>
-
-<!-- CTA FINAL -->
-<div class="cta-section">
-  <h2>Comece agora.<br>Vagas limitadas no plano grátis.</h2>
-  <p>10 GB grátis por 1 ano para os 200 primeiros. Sem cartão de crédito.</p>
-  <button class="btn btn-primary btn-lg" onclick="abrirAuth('cadastro')">🚀 Criar conta grátis</button>
-</div>
-<!-- CONTATO / LEAD -->
-<style>
-  .contato-section{padding:80px 5%;max-width:640px;margin:0 auto;}
-  .contato-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:40px;box-shadow:var(--shadow);}
-  .contato-box .section-label{color:#caa8ff;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
-  .contato-box h2{font-size:clamp(24px,3vw,32px);font-weight:800;color:#fff;margin-bottom:10px;letter-spacing:-0.5px;}
-  .contato-box p.sub{color:var(--muted);margin-bottom:28px;font-size:15px;}
-  .contato-field{margin-bottom:16px;}
-  .contato-field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;}
-  .contato-field input,.contato-field textarea{
-    width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);
-    background:rgba(255,255,255,0.04);color:var(--text);font-family:inherit;font-size:14px;
-    outline:none;transition:border-color .15s;
+// ── Aplica/expira a promoção "free_fundador" antes de devolver o perfil ──
+async function resolverPlanoAtual(db, perfil) {
+  // Se a promo expirou, rebaixa pra free padrão
+  if (perfil.plano === 'free_fundador' && perfil.plano_expira_em && new Date(perfil.plano_expira_em) < new Date()) {
+    await db.from('perfis').update({ plano: 'free', plano_expira_em: null }).eq('id', perfil.id);
+    perfil.plano = 'free';
+    perfil.plano_expira_em = null;
   }
-  .contato-field input:focus,.contato-field textarea:focus{border-color:var(--primary);}
-  .contato-field textarea{resize:vertical;min-height:90px;}
-  .contato-submit{
-    width:100%;padding:14px;border-radius:11px;border:none;font-size:15px;font-weight:700;
-    background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;cursor:pointer;
-    margin-top:6px;transition:opacity .15s;
+  return perfil;
+}
+
+app.get('/api/perfil', auth, async (req, res) => {
+  const { data, error } = await req.db.from('perfis').select('*').eq('id', req.user.id).single();
+  if (error) return res.status(500).json({ erro: error.message });
+  const perfil = await resolverPlanoAtual(req.db, data);
+  const limite = PLANOS[perfil.plano] || PLANOS.free;
+  res.json({ ...perfil, limite, percentual: Math.round((perfil.storage_usado / limite) * 100) });
+});
+
+// ── Chamado uma vez no cadastro (signup) para tentar aplicar a promo dos 200 primeiros ──
+app.post('/api/promo/fundador', auth, async (req, res) => {
+  const { data: perfil } = await req.db.from('perfis').select('id, plano').eq('id', req.user.id).single();
+  if (!perfil) return res.status(404).json({ erro: 'Perfil não encontrado' });
+
+  // Já tem algum plano definido (não é o primeiro contato) — não reaplica
+  if (perfil.plano && perfil.plano !== 'free') {
+    return res.json({ aplicado: false, motivo: 'Perfil já possui um plano' });
   }
-  .contato-submit:hover{opacity:0.9;}
-  .contato-submit:disabled{opacity:0.5;cursor:not-allowed;}
-  .contato-msg{margin-top:14px;font-size:13px;text-align:center;display:none;}
-  .contato-msg.ok{color:var(--success);}
-  .contato-msg.erro{color:var(--danger);}
-</style>
 
-<div class="contato-section" id="contato">
-  <div class="contato-box">
-    <div class="section-label">Fale com a gente</div>
-    <h2>Ainda com dúvidas?</h2>
-    <p class="sub">Deixe seus dados que nossa equipe entra em contato pra te ajudar a escolher o melhor plano.</p>
+  const { count } = await req.db.from('perfis').select('id', { count: 'exact', head: true }).eq('plano', 'free_fundador');
 
-    <form id="formContato" onsubmit="return enviarLeadFormulario(event)">
-      <div class="contato-field">
-        <label for="lead-nome">Nome</label>
-        <input type="text" id="lead-nome" required placeholder="Seu nome completo">
-      </div>
-      <div class="contato-field">
-        <label for="lead-email">E-mail</label>
-        <input type="email" id="lead-email" required placeholder="voce@email.com">
-      </div>
-      <div class="contato-field">
-        <label for="lead-telefone">Telefone (opcional)</label>
-        <input type="tel" id="lead-telefone" placeholder="(00) 00000-0000">
-      </div>
-      <div class="contato-field">
-        <label for="lead-mensagem">Mensagem (opcional)</label>
-        <textarea id="lead-mensagem" placeholder="Conta um pouco do que você precisa..."></textarea>
-      </div>
-      <button type="submit" class="contato-submit" id="contatoBtn">Enviar mensagem</button>
-      <div class="contato-msg" id="contatoMsg"></div>
-    </form>
-  </div>
-</div>
+  if ((count || 0) >= LIMITE_VAGAS_FUNDADOR) {
+    return res.json({ aplicado: false, motivo: 'Promoção esgotada', vagas_restantes: 0 });
+  }
 
-<script>
-async function enviarLeadFormulario(ev){
-  ev.preventDefault();
-  const btn = document.getElementById('contatoBtn');
-  const msg = document.getElementById('contatoMsg');
-  const nome = document.getElementById('lead-nome').value.trim();
-  const email = document.getElementById('lead-email').value.trim();
-  const telefone = document.getElementById('lead-telefone').value.trim();
-  const mensagem = document.getElementById('lead-mensagem').value.trim();
+  const expira = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await req.db.from('perfis').update({
+    plano: 'free_fundador',
+    plano_expira_em: expira,
+  }).eq('id', req.user.id);
 
-  btn.disabled = true;
-  btn.textContent = 'Enviando...';
-  msg.style.display = 'none';
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ aplicado: true, plano: 'free_fundador', expira_em: expira, vagas_restantes: LIMITE_VAGAS_FUNDADOR - (count || 0) - 1 });
+});
 
-  try{
-    const resp = await fetch('https://cloudx-backend.vercel.app/api/leads', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ nome, email, telefone, mensagem, origem: 'organico' })
+// ── Consulta pública: quantas vagas da promo ainda restam (pra mostrar no site) ──
+app.get('/api/promo/fundador/vagas', async (req, res) => {
+  const db = getDB();
+  const { count } = await db.from('perfis').select('id', { count: 'exact', head: true }).eq('plano', 'free_fundador');
+  res.json({ vagas_restantes: Math.max(LIMITE_VAGAS_FUNDADOR - (count || 0), 0), total: LIMITE_VAGAS_FUNDADOR });
+});
+
+app.get('/api/arquivos', auth, async (req, res) => {
+  const pasta = req.query.pasta || '';
+  const caminho = `${req.user.id}${pasta ? '/' + pasta : ''}`;
+  const { data, error } = await req.db.storage.from('arquivos').list(caminho, { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json(data);
+});
+
+app.post('/api/arquivos/upload', auth, upload.single('arquivo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
+
+  // Verifica cota antes de subir o arquivo
+  const { data: perfil } = await req.db.from('perfis').select('plano, storage_usado, plano_expira_em, id').eq('id', req.user.id).single();
+  if (perfil) {
+    const perfilAtualizado = await resolverPlanoAtual(req.db, perfil);
+    const limite = PLANOS[perfilAtualizado.plano] || PLANOS.free;
+    if (perfilAtualizado.storage_usado + req.file.size > limite) {
+      return res.status(403).json({ erro: 'Cota excedida', plano: perfilAtualizado.plano });
+    }
+  }
+
+  const pasta = req.body.pasta || '';
+  const caminho = `${req.user.id}${pasta ? '/' + pasta : ''}/${req.file.originalname}`;
+  const { error } = await req.db.storage.from('arquivos').upload(caminho, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
+  if (error) return res.status(500).json({ erro: error.message });
+  await req.db.rpc('incrementar_storage', { uid: req.user.id, bytes: req.file.size });
+  res.json({ ok: true, caminho, tamanho: req.file.size });
+});
+
+app.get('/api/arquivos/download', auth, async (req, res) => {
+  const { caminho } = req.query;
+  if (!caminho) return res.status(400).json({ erro: 'Caminho obrigatório' });
+  if (!caminho.startsWith(req.user.id)) return res.status(403).json({ erro: 'Acesso negado' });
+  const { data, error } = await req.db.storage.from('arquivos').createSignedUrl(caminho, 3600);
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ url: data.signedUrl });
+});
+
+app.delete('/api/arquivos', auth, async (req, res) => {
+  const { caminho } = req.body;
+  if (!caminho) return res.status(400).json({ erro: 'Caminho obrigatório' });
+  if (!caminho.startsWith(req.user.id)) return res.status(403).json({ erro: 'Acesso negado' });
+  const { error } = await req.db.storage.from('arquivos').remove([caminho]);
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true });
+});
+
+app.post('/api/pastas', auth, async (req, res) => {
+  const { nome, pasta_pai } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Nome obrigatório' });
+  const caminho = `${req.user.id}/${pasta_pai ? pasta_pai + '/' : ''}${nome}/.keep`;
+  const { error } = await req.db.storage.from('arquivos').upload(caminho, Buffer.from(''), { contentType: 'text/plain', upsert: true });
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true });
+});
+
+app.post('/api/pagamento/criar', auth, async (req, res) => {
+  const { plano } = req.body;
+  const PRECOS = {
+    basico:    { valor: 4.99,  nome: 'Plano Básico — 30 GB'    },
+    essencial: { valor: 9.99,  nome: 'Plano Essencial — 100 GB' },
+    plus:      { valor: 29.99, nome: 'Plano Plus — 300 GB'     },
+    premium:   { valor: 49.99, nome: 'Plano Premium — 1 TB'    },
+  };
+  if (!PRECOS[plano]) return res.status(400).json({ erro: 'Plano inválido' });
+  try {
+    const preference = await mp.criarPreferencia({
+      items: [{ title: PRECOS[plano].nome, unit_price: PRECOS[plano].valor, quantity: 1, currency_id: 'BRL' }],
+      payer: { email: req.user.email },
+      external_reference: `${req.user.id}|${plano}`,
+      back_urls: {
+        success: `${process.env.FRONTEND_URL}/sucesso`,
+        failure: `${process.env.FRONTEND_URL}/erro`,
+        pending: `${process.env.FRONTEND_URL}/pendente`,
+      },
+      auto_return: 'approved',
+      notification_url: `${process.env.BACKEND_URL}/api/webhook/mp`,
     });
-    const data = await resp.json();
+    res.json({ url: preference.init_point });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
 
-    if(data.ok){
-      msg.textContent = '✅ Mensagem enviada! Vamos entrar em contato em breve.';
-      msg.className = 'contato-msg ok';
-      msg.style.display = 'block';
-      document.getElementById('formContato').reset();
+app.post('/api/webhook/mp', async (req, res) => {
+  const { type, data } = req.body;
+  if (type !== 'payment') return res.sendStatus(200);
+  try {
+    const db = getDB();
+    const pagamento = await mp.buscarPagamento(data.id);
+    if (pagamento.status !== 'approved') return res.sendStatus(200);
+    const [userId, plano] = (pagamento.external_reference || '').split('|');
+    if (!userId || !plano) return res.sendStatus(200);
+    // Busca plano atual para calcular renovação
+    const { data: perfilAtual } = await db.from('perfis').select('plano_expira_em').eq('id', userId).single();
+
+    // Se já tem plano ativo, renova a partir da data de expiração
+    // Se não, começa agora (30 dias)
+    let novaExpiracao;
+    if(perfilAtual?.plano_expira_em && new Date(perfilAtual.plano_expira_em) > new Date()) {
+      novaExpiracao = new Date(new Date(perfilAtual.plano_expira_em).getTime() + 30 * 24 * 60 * 60 * 1000);
     } else {
-      throw new Error(data.erro || 'Erro desconhecido');
+      novaExpiracao = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
-  } catch(e){
-    msg.textContent = '❌ Não foi possível enviar. Tente novamente em instantes.';
-    msg.className = 'contato-msg erro';
-    msg.style.display = 'block';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Enviar mensagem';
+
+    await db.from('perfis').update({
+      plano,
+      plano_expira_em: novaExpiracao.toISOString(),
+      ultimo_pagamento_id: String(data.id),
+    }).eq('id', userId);
+
+    console.log(`✅ Plano ${plano} renovado até ${novaExpiracao.toLocaleDateString('pt-BR')} para ${userId}`);
+    res.sendStatus(200);
+  } catch (e) {
+    res.sendStatus(500);
   }
-  return false;
-}
-</script>
-
-<footer>
-  <div class="footer-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="28" height="28" style="display:inline-block;vertical-align:middle;">
-  <polygon points="50,2 98,27 98,73 50,98 2,73 2,27" fill="#6C4CF1"/>
-  <polygon points="50,2 98,27 98,73 50,98 2,73 2,27" fill="none" stroke="#8B5CF6" stroke-width="2"/>
-  <path d="M62 28 Q30 28 30 50 Q30 72 62 72" stroke="white" stroke-width="7" fill="none" stroke-linecap="round"/>
-  <circle cx="63" cy="28" r="7" fill="white"/>
-  <circle cx="63" cy="72" r="7" fill="white"/>
-</svg> CloudX</div>
-  <div class="footer-copy">© 2026 CloudX · Sua nuvem. Seus arquivos. Em qualquer lugar.</div>
-</footer>
-
-</div><!-- /landing -->
-
-<!-- ═══ AUTH MODAL ═══ -->
-<div class="auth-overlay" id="authOverlay" onclick="if(event.target===this)fecharAuth()">
-  <div class="auth-modal" style="position:relative">
-    <button class="modal-close-btn" onclick="fecharAuth()">✕</button>
-
-    <div id="modal-login">
-      <div class="auth-modal-title">Entrar no CloudX</div>
-      <div class="auth-modal-sub">Bem-vindo de volta!</div>
-      <div class="field"><label>E-mail</label><input type="email" id="login-email" placeholder="seu@email.com"></div>
-      <div class="field"><label>Senha</label><input type="password" id="login-senha" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()"></div>
-      <button class="btn btn-primary" style="width:100%;padding:13px;font-size:15px;" onclick="login()">Entrar →</button>
-      <div class="divider">ou</div>
-      <button class="btn-google-modal" onclick="loginGoogle()">
-        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-        Continuar com Google
-      </button>
-      <div class="auth-switch" onclick="trocarModal('cadastro')">Não tem conta? <span>Criar grátis</span></div>
-    </div>
-
-    <div id="modal-cadastro" style="display:none">
-      <div class="auth-modal-title">Criar conta</div>
-      <div class="auth-modal-sub">10 GB grátis por 1 ano — vagas para os 200 primeiros</div>
-      <div class="field"><label>E-mail</label><input type="email" id="cad-email" placeholder="seu@email.com"></div>
-      <div class="field"><label>Senha</label><input type="password" id="cad-senha" placeholder="Mínimo 6 caracteres"></div>
-      <button class="btn btn-primary" style="width:100%;padding:13px;font-size:15px;" onclick="cadastrar()">Criar conta →</button>
-      <div class="divider">ou</div>
-      <button class="btn-google-modal" onclick="loginGoogle()">
-        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-        Continuar com Google
-      </button>
-      <div class="auth-switch" onclick="trocarModal('login')">Já tem conta? <span>Entrar</span></div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ DASHBOARD ═══ -->
-<div id="dashboard">
-  <div class="dash-topbar">
-    <div class="dash-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="28" height="28" style="display:inline-block;vertical-align:middle;">
-  <polygon points="50,2 98,27 98,73 50,98 2,73 2,27" fill="#6C4CF1"/>
-  <polygon points="50,2 98,27 98,73 50,98 2,73 2,27" fill="none" stroke="#8B5CF6" stroke-width="2"/>
-  <path d="M62 28 Q30 28 30 50 Q30 72 62 72" stroke="white" stroke-width="7" fill="none" stroke-linecap="round"/>
-  <circle cx="63" cy="28" r="7" fill="white"/>
-  <circle cx="63" cy="72" r="7" fill="white"/>
-</svg> CloudX</div>
-    <span class="dash-email" id="dash-email"></span>
-    <button class="dash-btn up" onclick="abrirPlanos()">⬆️ Upgrade</button>
-    <button class="dash-btn out" onclick="sair()">Sair</button>
-  </div>
-
-  <div class="dash-layout">
-    <div class="dash-sidebar">
-      <div class="dash-nav-label">Arquivos</div>
-      <div class="dash-nav-item active" onclick="irHome()">▦ Meus arquivos</div>
-      <div class="dash-nav-label">Conta</div>
-      <div class="dash-nav-item" onclick="abrirPlanos()">◈ Planos</div>
-
-      <div class="storage-card">
-        <div class="storage-title">Armazenamento</div>
-        <div class="storage-numbers">
-          <div class="storage-used" id="storage-used">0 B utilizados</div>
-          <div class="storage-free" id="storage-free">10 GB disponível</div>
-        </div>
-        <div class="storage-bar"><div class="storage-fill" id="storage-fill" style="width:0%"></div></div>
-        <div class="storage-percent" id="storage-percent">0%</div>
-        <div class="storage-plan" id="storage-plan">FREE</div>
-        <button class="btn-up-storage" onclick="abrirPlanos()">⬆️ Fazer upgrade</button>
-      </div>
-
-      <div class="invite-dash-card">
-        <div class="invite-dash-icon">🎁</div>
-        <div class="invite-dash-title">Ganhe 5 GB extras</div>
-        <div class="invite-dash-text">Convide um amigo para o CloudX</div>
-        <button class="btn-invite-dash" onclick="convidar()">Convidar</button>
-      </div>
-    </div>
-
-    <div class="dash-content">
-      <div class="dash-header">
-        <div>
-          <div class="dash-title" id="dash-title">Meus arquivos</div>
-          <div class="breadcrumb" id="breadcrumb"></div>
-        </div>
-        <button class="dash-action secondary" onclick="novaPasta()">📁 Nova pasta</button>
-        <button class="dash-action secondary" onclick="document.getElementById('fileInput').click()">⬆️ Upload</button>
-        <button class="dash-action primary" onclick="compartilhar()">🔗 Compartilhar</button>
-      </div>
-
-      <input type="file" id="fileInput" multiple onchange="uploadArquivos(this.files)">
-
-      <div class="upload-zone" id="uploadArea"
-        ondragover="event.preventDefault();this.classList.add('drag')"
-        ondragleave="this.classList.remove('drag')"
-        ondrop="event.preventDefault();this.classList.remove('drag');uploadArquivos(event.dataTransfer.files)"
-        onclick="document.getElementById('fileInput').click()">
-        <div class="upload-zone-icon">☁️</div>
-        <div class="upload-zone-text">Arraste arquivos aqui</div>
-        <div class="upload-zone-sub">ou clique para selecionar — qualquer tipo de arquivo</div>
-      </div>
-
-      <div class="progress-wrap" id="uploadProgress">
-        <div class="progress-name" id="progressNome">Enviando...</div>
-        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-      </div>
-
-      <div class="files-grid" id="filesGrid"></div>
-      <div class="empty-state" id="emptyState" style="display:none">
-        <div class="empty-icon">📂</div>
-        <div class="empty-text">Nenhum arquivo aqui</div>
-        <div class="empty-sub">Arraste arquivos ou clique em Upload para começar</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL PLANOS -->
-<div class="plans-overlay" id="planosOverlay" onclick="if(event.target===this)fecharPlanos()" style="display:none">
-  <div class="plans-modal">
-    <button class="plans-modal-close" onclick="fecharPlanos()">✕</button>
-    <div class="plans-modal-title">Escolha seu plano</div>
-    <div class="plans-modal-sub">PIX, boleto ou cartão — sem mensalidade surpresa</div>
-    <div class="plans-modal-grid">
-      <div class="plan-modal-card">
-        <div class="plan-modal-name">Básico</div>
-        <div class="plan-modal-price">R$ 4<span>,99/mês</span></div>
-        <div class="plan-modal-storage">30 GB</div>
-        <button class="btn-plan-modal" onclick="assinarPlano('basico')">Assinar</button>
-      </div>
-      <div class="plan-modal-card">
-        <div class="plan-modal-name">Essencial</div>
-        <div class="plan-modal-price">R$ 9<span>,99/mês</span></div>
-        <div class="plan-modal-storage">100 GB</div>
-        <button class="btn-plan-modal" onclick="assinarPlano('essencial')">Assinar</button>
-      </div>
-      <div class="plan-modal-card featured">
-        <div class="plan-modal-badge">POPULAR</div>
-        <div class="plan-modal-name">Plus</div>
-        <div class="plan-modal-price">R$ 29<span>,99/mês</span></div>
-        <div class="plan-modal-storage">300 GB</div>
-        <button class="btn-plan-modal" onclick="assinarPlano('plus')">Assinar</button>
-      </div>
-      <div class="plan-modal-card">
-        <div class="plan-modal-name">Premium</div>
-        <div class="plan-modal-price">R$ 49<span>,99/mês</span></div>
-        <div class="plan-modal-storage">1 TB</div>
-        <button class="btn-plan-modal" onclick="assinarPlano('premium')">Assinar</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<script>
-const SUPABASE_URL = 'https://inlhoaccvtvxipvuiidh.supabase.co';
-const SUPABASE_KEY = 'sb_publishable__eLNNzgBEC7InhI_YWhg1w_3xGEXRLm';
-const API = 'https://cloudx-backend.vercel.app';
-
-const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { detectSessionInUrl: true, flowType: 'implicit' }
 });
 
-let pastaAtual = '';
-let token = '';
+const path = require("path");
+const root = path.join(__dirname, "..");
 
-// ── Atualiza o badge da home e o contador circular com o número real de vagas restantes na promo ──
-async function atualizarVagasPromo(){
-  const badge = document.getElementById('promoBadge');
-  const circleNum = document.getElementById('vagasCircleNum');
-  const circle = document.getElementById('vagasCircle');
-  try{
-    const resp = await fetch(API+'/api/promo/fundador/vagas');
-    const r = await resp.json();
-    if(typeof r?.vagas_restantes === 'number'){
-      if(r.vagas_restantes > 0){
-        if(badge) badge.textContent = `✨ 10 GB grátis por 1 ano — restam ${r.vagas_restantes} de ${r.total} vagas`;
-        if(circleNum) circleNum.textContent = r.vagas_restantes;
-      } else {
-        if(badge) badge.textContent = '✨ Promoção dos 200 primeiros já esgotada — confira nossos planos';
-        if(circleNum) circleNum.textContent = '0';
-        if(circle) circle.style.background = 'linear-gradient(135deg,#6b6294,#4a4470)'; // esgotado: cinza
-      }
-    }
-  }catch(e){ /* mantém o texto/número padrão se a API não responder */ }
-}
-atualizarVagasPromo();
+app.get("/", (req, res) => { res.sendFile(path.join(root, "index.html")); });
+app.get("/manifest.json", (req, res) => { res.sendFile(path.join(root, "manifest.json")); });
+app.get("/sw.js", (req, res) => { res.setHeader("Content-Type","application/javascript"); res.sendFile(path.join(root, "sw.js")); });
+app.get("/icon.svg", (req, res) => { res.sendFile(path.join(root, "icon.svg")); });
+app.get("/icon-192.png", (req, res) => { res.sendFile(path.join(root, "icon-192.png")); });
+app.get("/icon-512.png", (req, res) => { res.sendFile(path.join(root, "icon-512.png")); });
+app.get("/sucesso", (req, res) => { res.sendFile(path.join(root, "sucesso.html")); });
+app.get("/sucesso", (req, res) => { res.sendFile(require("path").join(__dirname, "../sucesso.html")); });
+app.get("/erro", (req, res) => { res.send('<html><body style="font-family:sans-serif;text-align:center;padding:80px"><h1>❌ Pagamento não concluído</h1><p>Tente novamente.</p><a href="/">← Voltar</a></body></html>'); });
+app.get("/pendente", (req, res) => { res.send('<html><body style="font-family:sans-serif;text-align:center;padding:80px"><h1>⏳ Pagamento pendente</h1><p>Aguardando confirmação. Seu plano será ativado em breve.</p><a href="/">← Voltar</a></body></html>'); });
 
-// ── TOAST ──
-function toast(msg, tipo=''){
-  const t=document.getElementById('toast');
-  t.textContent=msg; t.className='toast show '+tipo;
-  setTimeout(()=>t.className='toast',3000);
-}
+module.exports = app;
 
-// ── AUTH MODAL ──
-function abrirAuth(form='login'){
-  trocarModal(form);
-  document.getElementById('authOverlay').style.display='flex';
-}
-function fecharAuth(){ document.getElementById('authOverlay').style.display='none'; }
-function trocarModal(f){
-  ['login','cadastro'].forEach(x=>document.getElementById('modal-'+x).style.display=x===f?'':'none');
-}
 
-async function login(){
-  const email=document.getElementById('login-email').value;
-  const senha=document.getElementById('login-senha').value;
-  const {data,error}=await db.auth.signInWithPassword({email,password:senha});
-  if(error)return toast('Erro: '+error.message,'erro');
-  fecharAuth();
-  iniciarApp(data.session);
-}
+// ============================================
+// ROTAS DE LEADS / CRM
+// ============================================
 
-async function cadastrar(){
-  const email=document.getElementById('cad-email').value;
-  const senha=document.getElementById('cad-senha').value;
-  const {data,error}=await db.auth.signUp({email,password:senha});
-  if(error)return toast('Erro: '+error.message,'erro');
+// Lista todos os leads (usado pelo dashboard admin)
+app.get('/api/leads', async (req, res) => {
+  const db = getDB();
+  const { data, error } = await db.from('leads').select('*').order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json(data);
+});
 
-  // Se o Supabase já devolveu sessão (confirmação de e-mail desativada),
-  // tenta aplicar a promo dos 200 primeiros imediatamente.
-  if(data?.session?.access_token){
-    await aplicarPromoFundador(data.session.access_token);
-  }
+// Cria um novo lead (pode ser usado por um formulario de contato no site, futuramente)
+app.post('/api/leads', async (req, res) => {
+  const { nome, email, telefone, origem, mensagem, plano_recomendado } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Nome obrigatorio' });
+  const db = getDB();
+  const { data, error } = await db.from('leads').insert({
+    nome, email, telefone,
+    origem: origem || 'organico',
+    mensagem,
+    plano_recomendado,
+    status: 'novo',
+    score: 0,
+  }).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, lead: data });
+});
 
-  toast('Conta criada! Faça login.','ok');
-  trocarModal('login');
-  atualizarVagasPromo(); // refletir imediatamente a vaga ocupada no contador
-}
+// Atualiza status/score/plano de um lead (usado no CRM interno)
+app.patch('/api/leads/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status, score, plano_recomendado, mensagem } = req.body;
+  const db = getDB();
+  const campos = {};
+  if (status !== undefined) campos.status = status;
+  if (score !== undefined) campos.score = score;
+  if (plano_recomendado !== undefined) campos.plano_recomendado = plano_recomendado;
+  if (mensagem !== undefined) campos.mensagem = mensagem;
 
-// Chama a rota do backend que decide se o usuário ganha os 10GB/1 ano (200 primeiros)
-async function aplicarPromoFundador(accessToken){
-  try{
-    const resp = await fetch(API+'/api/promo/fundador',{
-      method:'POST',
-      headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'}
+  const { data, error } = await db.from('leads').update(campos).eq('id', id).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, lead: data });
+});
+
+// Remove um lead
+app.delete('/api/leads/:id', async (req, res) => {
+  const { id } = req.params;
+  const db = getDB();
+  const { error } = await db.from('leads').delete().eq('id', id);
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true });
+});
+
+// ============================================
+// SUBSTITUI a rota /dashboard/stats anterior
+// (agora inclui numeros de Leads/CRM tambem)
+// ============================================
+
+app.get('/dashboard/stats', async (req, res) => {
+  try {
+    const db = getDB();
+
+    const { data: perfis, error: erroPerfis } = await db.from('perfis').select('plano, storage_usado');
+    if (erroPerfis) return res.status(500).json({ erro: erroPerfis.message });
+
+    const { data: leads, error: erroLeads } = await db.from('leads').select('status, score, origem, plano_recomendado');
+    // Se a tabela de leads ainda nao existir, nao quebra o dashboard -- so retorna vazio
+    const listaLeads = erroLeads ? [] : (leads || []);
+
+    const totalUsuarios = perfis.length;
+    const porPlano = { free: 0, free_fundador: 0, basico: 0, essencial: 0, plus: 0, premium: 0 };
+    let storageTotalUsado = 0;
+
+    perfis.forEach(p => {
+      const plano = p.plano || 'free';
+      if (porPlano[plano] !== undefined) porPlano[plano]++;
+      storageTotalUsado += p.storage_usado || 0;
     });
-    const r = await resp.json();
-    if(r?.aplicado){
-      toast('🎉 Você ganhou 10 GB grátis por 1 ano!','ok');
-    }
-    atualizarVagasPromo(); // sincroniza o contador com o resultado real do backend
-  }catch(e){
-    // Falha silenciosa: não bloqueia o cadastro se a promo não puder ser checada agora
-    console.log('Promo fundador: não foi possível verificar agora.');
-  }
-}
 
-async function sair(){ await db.auth.signOut(); location.reload(); }
+    const PRECOS_DASHBOARD = { basico: 4.99, essencial: 9.99, plus: 29.99, premium: 49.99 };
+    const receitaMensal =
+      (porPlano.basico * PRECOS_DASHBOARD.basico) +
+      (porPlano.essencial * PRECOS_DASHBOARD.essencial) +
+      (porPlano.plus * PRECOS_DASHBOARD.plus) +
+      (porPlano.premium * PRECOS_DASHBOARD.premium);
 
-async function loginGoogle(){
-  await db.auth.signInWithOAuth({
-    provider:'google',
-    options:{ redirectTo: window.location.origin + window.location.pathname }
-  });
-}
+    // ── Estatisticas de Leads ──
+    const totalLeads = listaLeads.length;
+    const porStatus = { novo: 0, em_conversa: 0, qualificado: 0, convertido: 0, perdido: 0 };
+    const porOrigem = {};
+    let somaScore = 0;
 
-// ── APP ──
-function iniciarApp(session){
-  if(!session) return;
-  token = session.access_token;
-  document.getElementById('landing').style.display='none';
-  document.getElementById('authOverlay').style.display='none';
-  const dash = document.getElementById('dashboard');
-  dash.style.cssText='display:block !important;';
-  const em = document.getElementById('dash-email');
-  if(em) em.textContent = session.user.email;
-  aplicarPromoFundador(token); // seguro chamar sempre: o backend só aplica se ainda estiver no plano free
-  carregarPerfil();
-  listarArquivos();
-}
+    listaLeads.forEach(l => {
+      const status = l.status || 'novo';
+      if (porStatus[status] !== undefined) porStatus[status]++;
+      const origem = l.origem || 'organico';
+      porOrigem[origem] = (porOrigem[origem] || 0) + 1;
+      somaScore += l.score || 0;
+    });
 
-function irHome(){ pastaAtual=''; listarArquivos(); document.getElementById('dash-title').textContent='Meus arquivos'; document.getElementById('breadcrumb').innerHTML=''; }
+    const scoreMedio = totalLeads > 0 ? Math.round(somaScore / totalLeads) : 0;
+    const taxaConversao = totalLeads > 0 ? Math.round((porStatus.convertido / totalLeads) * 100) : 0;
 
-// ── PERFIL / STORAGE ──
-async function carregarPerfil(){
-  const r = await api('GET','/api/perfil'); if(!r) return;
-  document.getElementById('storage-used').textContent = formatarBytes(r.storage_usado) + ' utilizados';
-  document.getElementById('storage-free').textContent = formatarBytes(r.limite - r.storage_usado) + ' livres';
-  document.getElementById('storage-percent').textContent = r.percentual + '%';
-  document.getElementById('storage-plan').textContent = r.plano.toUpperCase();
-  const fill = document.getElementById('storage-fill');
-  fill.style.width = r.percentual + '%';
-  if(r.percentual >= 90) fill.classList.add('danger');
-}
-
-// ── ARQUIVOS ──
-async function listarArquivos(){
-  const grid = document.getElementById('filesGrid');
-  const empty = document.getElementById('emptyState');
-  grid.innerHTML = '<div style="grid-column:1/-1;color:#6b6294;font-size:13px;padding:10px">Carregando...</div>';
-  const r = await api('GET','/api/arquivos?pasta='+encodeURIComponent(pastaAtual));
-  if(!r){ grid.innerHTML=''; return; }
-  const itens = r.filter(i=>i.name!=='.keep');
-  grid.innerHTML = '';
-  if(pastaAtual){
-    const card = document.createElement('div');
-    card.className = 'file-card';
-    card.innerHTML = '<div class="file-card-icon">←</div><div class="file-card-name">Voltar</div>';
-    card.onclick = ()=>{ pastaAtual=pastaAtual.includes('/')?pastaAtual.substring(0,pastaAtual.lastIndexOf('/')):''; listarArquivos(); atualizarBreadcrumb(); };
-    grid.appendChild(card);
-  }
-  if(!itens.length && !pastaAtual){ empty.style.display=''; return; }
-  empty.style.display = 'none';
-  itens.forEach(item=>{
-    const isPasta = !item.metadata;
-    const card = document.createElement('div');
-    card.className = 'file-card';
-    const caminho = (pastaAtual?pastaAtual+'/':'')+item.name;
-    card.innerHTML = `
-      <div class="file-card-actions">
-        ${!isPasta?`<button class="file-icon-btn" onclick="event.stopPropagation();baixarArquivo('${caminho}')" title="Baixar">⬇️</button>`:''}
-        <button class="file-icon-btn del" onclick="event.stopPropagation();deletarArquivo('${caminho}','${item.name}')" title="Deletar">🗑️</button>
-      </div>
-      <div class="file-card-icon">${isPasta?'📁':iconeArquivo(item.name)}</div>
-      <div class="file-card-name">${item.name}</div>
-      <div class="file-card-size">${isPasta?'Pasta':formatarBytes(item.metadata?.size||0)}</div>`;
-    if(isPasta) card.onclick=()=>{ pastaAtual=caminho; listarArquivos(); atualizarBreadcrumb(); };
-    grid.appendChild(card);
-  });
-}
-
-function atualizarBreadcrumb(){
-  const bc = document.getElementById('breadcrumb');
-  document.getElementById('dash-title').textContent = pastaAtual || 'Meus arquivos';
-  if(!pastaAtual){ bc.innerHTML=''; return; }
-  const partes = pastaAtual.split('/');
-  bc.innerHTML = '<a onclick="irHome()">Início</a>';
-  partes.forEach((p,i)=>{
-    bc.innerHTML += ' / ';
-    if(i < partes.length-1){ const c=partes.slice(0,i+1).join('/'); bc.innerHTML+=`<a onclick="pastaAtual='${c}';listarArquivos();atualizarBreadcrumb()">${p}</a>`; }
-    else bc.innerHTML += `<span>${p}</span>`;
-  });
-}
-
-async function uploadArquivos(files){
-  const progress = document.getElementById('uploadProgress');
-  const fill = document.getElementById('progressFill');
-  const nome = document.getElementById('progressNome');
-  progress.style.display = '';
-  for(const file of files){
-    nome.textContent = 'Enviando: '+file.name; fill.style.width='20%';
-    const form = new FormData(); form.append('arquivo',file); form.append('pasta',pastaAtual);
-    try{
-      const resp = await fetch(API+'/api/arquivos/upload',{method:'POST',headers:{'Authorization':'Bearer '+token},body:form});
-      fill.style.width = '100%';
-      if(!resp.ok){ const err=await resp.json(); toast('Erro: '+err.erro,'erro'); }
-      else toast(file.name+' enviado!','ok');
-    }catch(e){ toast('Erro de conexão','erro'); }
-  }
-  setTimeout(()=>{ progress.style.display='none'; fill.style.width='0%'; },600);
-  listarArquivos(); carregarPerfil();
-}
-
-async function baixarArquivo(caminho){
-  const uid = (await db.auth.getUser()).data.user.id;
-  const r = await api('GET','/api/arquivos/download?caminho='+encodeURIComponent(uid+'/'+caminho));
-  if(r?.url) window.open(r.url,'_blank');
-}
-
-async function deletarArquivo(caminho,nome){
-  if(!confirm('Deletar "'+nome+'"?')) return;
-  const uid = (await db.auth.getUser()).data.user.id;
-  const r = await api('DELETE','/api/arquivos',{caminho:uid+'/'+caminho});
-  if(r?.ok){ toast('Deletado!','ok'); listarArquivos(); carregarPerfil(); }
-}
-
-async function novaPasta(){
-  const nome = prompt('Nome da pasta:'); if(!nome?.trim()) return;
-  const r = await api('POST','/api/pastas',{nome:nome.trim(),pasta_pai:pastaAtual});
-  if(r?.ok){ toast('Pasta criada!','ok'); listarArquivos(); }
-}
-
-function compartilhar(){ toast('Em breve: compartilhamento de arquivos!',''); }
-
-function convidar(){
-  const link = window.location.origin + window.location.pathname + '?ref='+btoa((document.getElementById('dash-email').textContent||'user'));
-  navigator.clipboard.writeText(link).then(()=>toast('Link de convite copiado!','ok')).catch(()=>toast('Link: '+link,''));
-}
-
-// ── PLANOS ──
-function abrirPlanos(){ document.getElementById('planosOverlay').style.display='flex'; }
-function fecharPlanos(){ document.getElementById('planosOverlay').style.display='none'; }
-
-async function assinarPlano(plano){
-  toast('Redirecionando para pagamento...','');
-  const r = await api('POST','/api/pagamento/criar',{plano});
-  if(r?.url) window.open(r.url,'_blank');
-}
-
-// ── HELPERS ──
-async function api(method,path,body=null){
-  try{
-    const resp = await fetch(API+path,{method,headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
-    return await resp.json();
-  }catch(e){ toast('Erro de conexão','erro'); return null; }
-}
-
-function formatarBytes(b){
-  if(!b||b===0) return '0 B';
-  if(b<1024) return b+' B';
-  if(b<1024*1024) return (b/1024).toFixed(1)+' KB';
-  if(b<1024*1024*1024) return (b/1024/1024).toFixed(1)+' MB';
-  return (b/1024/1024/1024).toFixed(2)+' GB';
-}
-
-function iconeArquivo(nome){
-  const ext = nome.split('.').pop().toLowerCase();
-  const m={pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',ppt:'📋',pptx:'📋',jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️',webp:'🖼️',svg:'🖼️',mp4:'🎬',mov:'🎬',avi:'🎬',mp3:'🎵',wav:'🎵',zip:'🗜️',rar:'🗜️',js:'⚙️',ts:'⚙️',py:'🐍',json:'⚙️',html:'🌐',css:'🎨'};
-  return m[ext]||'📎';
-}
-
-// ── AUTH STATE ──
-db.auth.onAuthStateChange((event,session)=>{
-  if(session && ['SIGNED_IN','INITIAL_SESSION','TOKEN_REFRESHED'].includes(event)){
-    iniciarApp(session);
+    res.json({
+      ok: true,
+      atualizadoEm: new Date().toISOString(),
+      totalUsuarios,
+      porPlano,
+      storageTotalUsadoGB: (storageTotalUsado / (1024 ** 3)).toFixed(2),
+      receitaMensalEstimada: receitaMensal.toFixed(2),
+      leads: {
+        total: totalLeads,
+        porStatus,
+        porOrigem,
+        scoreMedio,
+        taxaConversao,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
   }
 });
-</script>
 
-<script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(r => console.log('SW registrado'))
-      .catch(e => console.log('SW erro:', e));
+// ============================================
+// ROTAS DE CAMPANHAS
+// ============================================
+
+app.get('/api/campanhas', async (req, res) => {
+  const db = getDB();
+  const { data, error } = await db.from('campanhas').select('*').order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json(data);
+});
+
+app.post('/api/campanhas', async (req, res) => {
+  const { nome, canal, orcamento, data_inicio, data_fim, observacoes } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Nome obrigatorio' });
+  const db = getDB();
+  const { data, error } = await db.from('campanhas').insert({
+    nome,
+    canal: canal || 'organico',
+    orcamento: orcamento || 0,
+    data_inicio: data_inicio || new Date().toISOString().slice(0, 10),
+    data_fim: data_fim || null,
+    observacoes: observacoes || null,
+    status: 'ativa',
+    cliques: 0,
+    conversoes: 0,
+  }).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, campanha: data });
+});
+
+app.patch('/api/campanhas/:id', async (req, res) => {
+  const { id } = req.params;
+  const { nome, canal, status, orcamento, cliques, conversoes, data_fim, observacoes } = req.body;
+  const db = getDB();
+  const campos = {};
+  if (nome !== undefined) campos.nome = nome;
+  if (canal !== undefined) campos.canal = canal;
+  if (status !== undefined) campos.status = status;
+  if (orcamento !== undefined) campos.orcamento = orcamento;
+  if (cliques !== undefined) campos.cliques = cliques;
+  if (conversoes !== undefined) campos.conversoes = conversoes;
+  if (data_fim !== undefined) campos.data_fim = data_fim;
+  if (observacoes !== undefined) campos.observacoes = observacoes;
+
+  const { data, error } = await db.from('campanhas').update(campos).eq('id', id).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, campanha: data });
+});
+
+app.delete('/api/campanhas/:id', async (req, res) => {
+  const { id } = req.params;
+  const db = getDB();
+  const { error } = await db.from('campanhas').delete().eq('id', id);
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true });
+});
+
+// ============================================
+// CHATBOT COM IA (Groq)
+// ============================================
+
+const SYSTEM_PROMPT_CLOUDX = `Você é o assistente virtual da CloudX, um serviço de armazenamento em nuvem no Brasil.
+
+INFORMAÇÕES SOBRE OS PLANOS:
+- Free: R$ 0/ano, 1 GB de armazenamento
+- Free Fundador: R$ 0, 10 GB por 1 ano (promoção limitada aos 30 primeiros cadastrados)
+- Básico: R$ 4,99/mês, 30 GB
+- Essencial: R$ 9,99/mês, 100 GB
+- Plus: R$ 29,99/mês, 300 GB
+- Premium: R$ 49,99/mês, 1 TB (1024 GB)
+
+REGRAS DE COMPORTAMENTO:
+- Seja breve, direto e simpático. Respostas de no máximo 3-4 frases.
+- Responda sempre em português do Brasil.
+- Se o usuário demonstrar interesse real (perguntar sobre preço, querer assinar, pedir contato humano), pergunte o nome e e-mail dele educadamente para que a equipe entre em contato.
+- Não invente informações que não foram passadas aqui. Se não souber algo, diga que vai encaminhar para a equipe humana.
+- Nunca peça senha, dados de cartão de crédito, ou informações sensíveis.`;
+
+async function chamarGroq(mensagens) {
+  const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'system', content: SYSTEM_PROMPT_CLOUDX }, ...mensagens],
+      temperature: 0.6,
+      max_tokens: 300,
+    }),
   });
+
+  if (!resp.ok) {
+    const erro = await resp.text();
+    throw new Error(`Groq API erro: ${resp.status} - ${erro}`);
+  }
+
+  const data = await resp.json();
+  return data.choices[0].message.content;
 }
-</script>
-<!-- WIDGET DE CHATBOT COM IA -->
-<style>
-  #cx-chat-bubble {
-    position: fixed; bottom: 24px; right: 24px; width: 60px; height: 60px;
-    border-radius: 50%; background: linear-gradient(135deg,var(--primary),var(--secondary));
-    display: flex; align-items: center; justify-content: center; cursor: pointer;
-    box-shadow: 0 8px 24px rgba(108,76,241,0.4); z-index: 9998; font-size: 26px;
-    transition: transform .15s;
-  }
-  #cx-chat-bubble:hover { transform: scale(1.06); }
-  #cx-chat-window {
-    position: fixed; bottom: 96px; right: 24px; width: 360px; max-width: calc(100vw - 32px);
-    height: 480px; max-height: calc(100vh - 140px); background: var(--surface);
-    border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    display: none; flex-direction: column; overflow: hidden; z-index: 9999;
-  }
-  #cx-chat-window.aberto { display: flex; }
-  #cx-chat-header {
-    background: linear-gradient(135deg,var(--primary),var(--secondary)); padding: 16px 18px;
-    display: flex; align-items: center; justify-content: space-between; color: #fff;
-  }
-  #cx-chat-header .titulo { font-weight: 700; font-size: 15px; }
-  #cx-chat-header .status { font-size: 11px; opacity: 0.85; }
-  #cx-chat-close { cursor: pointer; font-size: 18px; opacity: 0.85; background: none; border: none; color: #fff; }
-  #cx-chat-close:hover { opacity: 1; }
-  #cx-chat-messages {
-    flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px;
-  }
-  .cx-msg { max-width: 82%; padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
-  .cx-msg.bot { background: rgba(255,255,255,0.06); color: var(--text); align-self: flex-start; border-bottom-left-radius: 4px; }
-  .cx-msg.user { background: var(--primary); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
-  .cx-msg.digitando { display: flex; gap: 4px; align-items: center; }
-  .cx-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: cx-pulse 1.2s infinite; }
-  .cx-dot:nth-child(2) { animation-delay: 0.2s; }
-  .cx-dot:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes cx-pulse { 0%,60%,100%{opacity:0.3} 30%{opacity:1} }
-  #cx-chat-input-area { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
-  #cx-chat-input {
-    flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 12px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; resize: none;
-  }
-  #cx-chat-input:focus { border-color: var(--primary); }
-  #cx-chat-send {
-    background: var(--primary); border: none; color: #fff; width: 40px; height: 40px;
-    border-radius: 10px; cursor: pointer; font-size: 16px; flex-shrink: 0;
-  }
-  #cx-chat-send:hover { opacity: 0.9; }
-  #cx-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
-</style>
 
-<div id="cx-chat-bubble" onclick="cxAlternarChat()">💬</div>
-
-<div id="cx-chat-window">
-  <div id="cx-chat-header">
-    <div>
-      <div class="titulo">CloudX Assistente</div>
-      <div class="status">● Online agora</div>
-    </div>
-    <button id="cx-chat-close" onclick="cxAlternarChat()">✕</button>
-  </div>
-  <div id="cx-chat-messages"></div>
-  <div id="cx-chat-input-area">
-    <textarea id="cx-chat-input" rows="1" placeholder="Digite sua mensagem..." onkeydown="cxTeclaEnter(event)"></textarea>
-    <button id="cx-chat-send" onclick="cxEnviarMensagem()">➤</button>
-  </div>
-</div>
-
-<script>
-  const CX_API_CHAT = 'https://cloudx-backend.vercel.app/api/chatbot';
-  const CX_API_LEAD = 'https://cloudx-backend.vercel.app/api/chatbot/lead';
-
-  let cxHistorico = [];
-  let cxAberto = false;
-  let cxLeadCapturado = false;
-
-  function cxAlternarChat() {
-    cxAberto = !cxAberto;
-    document.getElementById('cx-chat-window').classList.toggle('aberto', cxAberto);
-    if (cxAberto && cxHistorico.length === 0) {
-      cxAdicionarMensagem('bot', 'Oi! 👋 Sou o assistente da CloudX. Posso te ajudar a escolher o melhor plano ou tirar alguma dúvida. Como posso ajudar?');
-    }
-  }
-
-  function cxTeclaEnter(ev) {
-    if (ev.key === 'Enter' && !ev.shiftKey) {
-      ev.preventDefault();
-      cxEnviarMensagem();
-    }
-  }
-
-  function cxAdicionarMensagem(tipo, texto) {
-    const box = document.getElementById('cx-chat-messages');
-    const div = document.createElement('div');
-    div.className = 'cx-msg ' + tipo;
-    div.textContent = texto;
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function cxMostrarDigitando() {
-    const box = document.getElementById('cx-chat-messages');
-    const div = document.createElement('div');
-    div.className = 'cx-msg bot digitando';
-    div.id = 'cx-digitando';
-    div.innerHTML = '<div class="cx-dot"></div><div class="cx-dot"></div><div class="cx-dot"></div>';
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function cxRemoverDigitando() {
-    const el = document.getElementById('cx-digitando');
-    if (el) el.remove();
-  }
-
-  // Deteccao simples: se a mensagem parecer conter nome + email, tenta capturar como lead
-  function cxTentarCapturarLead(textoUsuario) {
-    if (cxLeadCapturado) return;
-    const emailMatch = textoUsuario.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
-    if (!emailMatch) return;
-
-    const email = emailMatch[0];
-    // Usa o texto antes do email como possivel nome, ou pede generico
-    const nome = textoUsuario.replace(email, '').replace(/[^\p{L}\s]/gu, '').trim().slice(0, 60) || 'Visitante do chat';
-
-    cxLeadCapturado = true;
-    fetch(CX_API_LEAD, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nome,
-        email,
-        mensagem: 'Conversa via chatbot: ' + cxHistorico.map(m => m.content).join(' | ').slice(0, 500),
-      }),
-    }).catch(() => {});
-  }
-
-  async function cxEnviarMensagem() {
-    const input = document.getElementById('cx-chat-input');
-    const texto = input.value.trim();
-    if (!texto) return;
-
-    input.value = '';
-    document.getElementById('cx-chat-send').disabled = true;
-
-    cxAdicionarMensagem('user', texto);
-    cxHistorico.push({ role: 'user', content: texto });
-    cxTentarCapturarLead(texto);
-
-    cxMostrarDigitando();
-
-    try {
-      const resp = await fetch(CX_API_CHAT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagens: cxHistorico }),
-      });
-      const data = await resp.json();
-      cxRemoverDigitando();
-
-      if (data.ok) {
-        cxAdicionarMensagem('bot', data.resposta);
-        cxHistorico.push({ role: 'assistant', content: data.resposta });
-      } else {
-        cxAdicionarMensagem('bot', 'Desculpa, tive um problema para responder. Tenta de novo?');
-      }
-    } catch (e) {
-      cxRemoverDigitando();
-      cxAdicionarMensagem('bot', 'Erro de conexão. Verifica sua internet e tenta de novo.');
+app.post('/api/chatbot', async (req, res) => {
+  try {
+    const { mensagens } = req.body;
+    if (!mensagens || !Array.isArray(mensagens) || mensagens.length === 0) {
+      return res.status(400).json({ erro: 'Envie ao menos uma mensagem' });
     }
 
-    document.getElementById('cx-chat-send').disabled = false;
+    const resposta = await chamarGroq(mensagens);
+    res.json({ ok: true, resposta });
+  } catch (e) {
+    console.error('Erro no chatbot:', e.message);
+    res.status(500).json({ erro: 'Não foi possível gerar resposta agora. Tente novamente.' });
   }
-</script>
-</body>
-</html>
+});
+
+// Captura o lead direto da conversa do chatbot (quando o usuário deixa nome/email no chat)
+app.post('/api/chatbot/lead', async (req, res) => {
+  const { nome, email, telefone, mensagem } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Nome obrigatorio' });
+  const db = getDB();
+  const { data, error } = await db.from('leads').insert({
+    nome, email, telefone,
+    origem: 'chat',
+    mensagem: mensagem || 'Lead capturado via chatbot do site',
+    status: 'novo',
+    score: 30, // leads via chat já demonstraram interesse ativo, entram com score maior
+  }).select().single();
+  if (error) return res.status(500).json({ erro: error.message });
+  res.json({ ok: true, lead: data });
+});
