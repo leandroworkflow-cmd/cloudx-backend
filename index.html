@@ -1134,14 +1134,37 @@ function thumbOuIcone(nome, caminhoCompleto){
   const ext = nome.split('.').pop().toLowerCase();
   const imgs = ['jpg','jpeg','png','gif','webp','svg'];
   const vids = ['mp4','mov','avi','webm','mkv'];
-  const url = `${SUPABASE_URL}/storage/v1/object/public/arquivos/${caminhoCompleto}`;
-  if(imgs.includes(ext)){
-    return `<img class="file-card-thumb" src="${url}" alt="${nome}" loading="lazy" onerror="this.outerHTML='<div class=\\"file-card-icon\\">🖼️</div>'">`;
-  }
-  if(vids.includes(ext)){
-    return `<video class="file-card-thumb-video" src="${url}" preload="metadata" muted playsinline onerror="this.outerHTML='<div class=\\"file-card-icon\\">🎬</div>'"></video>`;
-  }
-  return `<div class="file-card-icon">${iconeArquivo(nome)}</div>`;
+  const isImg = imgs.includes(ext);
+  const isVid = vids.includes(ext);
+  if(!isImg && !isVid) return `<div class="file-card-icon">${iconeArquivo(nome)}</div>`;
+  const id = 'thumb_'+Math.random().toString(36).slice(2);
+  setTimeout(async ()=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    try {
+      const r = await api('GET','/api/arquivos/download?caminho='+encodeURIComponent(caminhoCompleto));
+      if(!r?.url) return;
+      if(isImg){
+        const img = document.createElement('img');
+        img.className = 'file-card-thumb';
+        img.src = r.url;
+        img.alt = nome;
+        img.loading = 'lazy';
+        img.onerror = ()=>{ img.outerHTML=`<div class="file-card-icon">🖼️</div>`; };
+        el.replaceWith(img);
+      } else {
+        const vid = document.createElement('video');
+        vid.className = 'file-card-thumb-video';
+        vid.src = r.url;
+        vid.preload = 'metadata';
+        vid.muted = true;
+        vid.playsInline = true;
+        vid.onerror = ()=>{ vid.outerHTML=`<div class="file-card-icon">🎬</div>`; };
+        el.replaceWith(vid);
+      }
+    } catch(e){ /* mantém placeholder */ }
+  }, 0);
+  return `<div class="file-card-icon" id="${id}">${isImg?'🖼️':'🎬'}</div>`;
 }
 
 // ── AUTH STATE ──
