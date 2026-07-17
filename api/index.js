@@ -18,14 +18,14 @@ const getDB = () => createClient(
 // ── PLANOS E LIMITES (em bytes) ──
 const PLANOS = {
   free:           1   * 1024 * 1024 * 1024,   // 1 GB (padrão, após 200 vagas ou expirar promo)
-  free_fundador:  10  * 1024 * 1024 * 1024,   // 10 GB — promo dos 200 primeiros, válida 1 ano
+  free_fundador:  10  * 1024 * 1024 * 1024,   // 10 GB — promo dos 30 primeiros, válida 1 ano
   basico:         30  * 1024 * 1024 * 1024,   // 30 GB
   essencial:      100 * 1024 * 1024 * 1024,   // 100 GB
   plus:           300 * 1024 * 1024 * 1024,   // 300 GB
   premium:        1024 * 1024 * 1024 * 1024,  // 1 TB
 };
 
-const LIMITE_VAGAS_FUNDADOR = 200;
+const LIMITE_VAGAS_FUNDADOR = 30;
 
 async function auth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
@@ -414,7 +414,7 @@ const SYSTEM_PROMPT_CLOUDX = `Você é o assistente virtual da CloudX, um servi�
 
 INFORMAÇÕES SOBRE OS PLANOS:
 - Free: R$ 0/ano, 1 GB de armazenamento
-- Free Fundador: R$ 0, 10 GB por 1 ano (promoção limitada aos 200 primeiros cadastrados)
+- Free Fundador: R$ 0, 10 GB por 1 ano (promoção limitada aos 30 primeiros cadastrados)
 - Básico: R$ 4,99/mês, 30 GB
 - Essencial: R$ 9,99/mês, 100 GB
 - Plus: R$ 29,99/mês, 300 GB
