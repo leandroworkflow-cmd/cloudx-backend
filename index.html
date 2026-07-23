@@ -111,7 +111,7 @@ nav{background:rgba(11,7,32,0.85);backdrop-filter:blur(14px);border-bottom:1px s
 .plan-card.featured{background:linear-gradient(160deg,var(--primary),#5a2fd6);border-color:transparent;box-shadow:0 12px 40px rgba(108,76,241,0.45);}
 .plan-card.free{border:1px dashed rgba(160,122,255,0.5);background:rgba(139,92,246,0.06);}
 
-/* ── CONTADOR CIRCULAR DE VAGAS (200 PRIMEIROS) ── */
+/* ── (estilos legados do contador de vagas, sem uso após remoção da promo antiga) ── */
 .plan-counter-circle{
   position:absolute;top:-26px;left:-26px;width:88px;height:88px;border-radius:50%;
   background:linear-gradient(135deg,var(--primary),var(--secondary));
@@ -359,7 +359,7 @@ footer{background:var(--bg-deep);padding:40px 5%;text-align:center;border-top:1p
 <!-- HERO + ILUSTRAÇÃO -->
 <div class="hero-wrap">
   <div class="hero">
-    <div class="hero-badge" id="promoBadge">✨ 10 GB grátis por 1 ano para os 30 primeiros</div>
+    <div class="hero-badge" id="promoBadge">✨ Experimente 2 GB grátis por 6 meses</div>
     <h1>Armazene seus arquivos<br><span>com segurança na nuvem.</span></h1>
     <p>Fotos, vídeos, documentos e projetos sempre disponíveis, em qualquer dispositivo.</p>
     <div class="hero-btns">
@@ -368,7 +368,7 @@ footer{background:var(--bg-deep);padding:40px 5%;text-align:center;border-top:1p
     </div>
     <div class="hero-stats">
       <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Seguro</div></div>
-      <div class="stat"><div class="stat-num">10 GB</div><div class="stat-label">Grátis*</div></div>
+      <div class="stat"><div class="stat-num">2 GB</div><div class="stat-label">Grátis*</div></div>
       <div class="stat"><div class="stat-num">∞</div><div class="stat-label">Dispositivos</div></div>
       <div class="stat"><div class="stat-num">24/7</div><div class="stat-label">Disponível</div></div>
     </div>
@@ -438,20 +438,16 @@ footer{background:var(--bg-deep);padding:40px 5%;text-align:center;border-top:1p
     <div class="section-sub" style="margin:0 auto;">Sem cartão de crédito para o plano grátis. Cancele quando quiser.</div>
     <div class="plans-grid">
       <div class="plan-card free">
-        <div class="plan-counter-circle" id="vagasCircle">
-          <div class="num" id="vagasCircleNum">30</div>
-          <div class="lbl">vagas</div>
-        </div>
-        <div class="plan-badge free-badge">30 PRIMEIROS</div>
+        <div class="plan-badge free-badge">EXPERIMENTE</div>
         <div class="plan-name">Free</div>
-        <div class="plan-price">R$ 0<span>/ano</span></div>
-        <div class="plan-storage">10 GB por 1 ano — só para os 200 primeiros inscritos</div>
+        <div class="plan-price">R$ 0<span>/6 meses</span></div>
+        <div class="plan-storage">2 GB grátis por 6 meses</div>
         <ul class="plan-features">
           <li>Upload de arquivos</li>
           <li>Criação de pastas</li>
           <li>Acesso web</li>
         </ul>
-        <button class="btn-plan" onclick="abrirAuth('cadastro')">Garantir vaga</button>
+        <button class="btn-plan" onclick="abrirAuth('cadastro')">Começar grátis</button>
       </div>
       <div class="plan-card">
         <div class="plan-name">Básico</div>
@@ -600,8 +596,8 @@ footer{background:var(--bg-deep);padding:40px 5%;text-align:center;border-top:1p
 
 <!-- CTA FINAL -->
 <div class="cta-section">
-  <h2>Comece agora.<br>Vagas limitadas no plano grátis.</h2>
-  <p>10 GB grátis por 1 ano para os 200 primeiros. Sem cartão de crédito.</p>
+  <h2>Comece agora.<br>Experimente grátis por 6 meses.</h2>
+  <p>2 GB grátis por 6 meses. Sem cartão de crédito.</p>
   <button class="btn btn-primary btn-lg" onclick="abrirAuth('cadastro')">🚀 Criar conta grátis</button>
 </div>
 <!-- CONTATO / LEAD -->
@@ -737,7 +733,7 @@ async function enviarLeadFormulario(ev){
 
     <div id="modal-cadastro" style="display:none">
       <div class="auth-modal-title">Criar conta</div>
-      <div class="auth-modal-sub">10 GB grátis por 1 ano — vagas para os 30 primeiros</div>
+      <div class="auth-modal-sub">Experimente 2 GB grátis por 6 meses</div>
       <div class="field"><label>E-mail</label><input type="email" id="cad-email" placeholder="seu@email.com"></div>
       <div class="field"><label>Senha</label><input type="password" id="cad-senha" placeholder="Mínimo 6 caracteres"></div>
       <button class="btn btn-primary" style="width:100%;padding:13px;font-size:15px;" onclick="cadastrar()">Criar conta →</button>
@@ -777,7 +773,7 @@ async function enviarLeadFormulario(ev){
         <div class="storage-title">Armazenamento</div>
         <div class="storage-numbers">
           <div class="storage-used" id="storage-used">0 B utilizados</div>
-          <div class="storage-free" id="storage-free">10 GB disponível</div>
+          <div class="storage-free" id="storage-free">2 GB disponível</div>
         </div>
         <div class="storage-bar"><div class="storage-fill" id="storage-fill" style="width:0%"></div></div>
         <div class="storage-percent" id="storage-percent">0%</div>
@@ -882,28 +878,6 @@ const db = createClient(SUPABASE_URL, SUPABASE_KEY, {
 let pastaAtual = '';
 let token = '';
 
-// ── Atualiza o badge da home e o contador circular com o número real de vagas restantes na promo ──
-async function atualizarVagasPromo(){
-  const badge = document.getElementById('promoBadge');
-  const circleNum = document.getElementById('vagasCircleNum');
-  const circle = document.getElementById('vagasCircle');
-  try{
-    const resp = await fetch(API+'/api/promo/fundador/vagas');
-    const r = await resp.json();
-    if(typeof r?.vagas_restantes === 'number'){
-      if(r.vagas_restantes > 0){
-        if(badge) badge.textContent = `✨ 10 GB grátis por 1 ano — restam ${r.vagas_restantes} de ${r.total} vagas`;
-        if(circleNum) circleNum.textContent = r.vagas_restantes;
-      } else {
-        if(badge) badge.textContent = '✨ Promoção dos 200 primeiros já esgotada — confira nossos planos';
-        if(circleNum) circleNum.textContent = '0';
-        if(circle) circle.style.background = 'linear-gradient(135deg,#6b6294,#4a4470)'; // esgotado: cinza
-      }
-    }
-  }catch(e){ /* mantém o texto/número padrão se a API não responder */ }
-}
-atualizarVagasPromo();
-
 // ── TOAST ──
 function toast(msg, tipo=''){
   const t=document.getElementById('toast');
@@ -937,17 +911,16 @@ async function cadastrar(){
   if(error)return toast('Erro: '+error.message,'erro');
 
   // Se o Supabase já devolveu sessão (confirmação de e-mail desativada),
-  // tenta aplicar a promo dos 200 primeiros imediatamente.
+  // tenta aplicar a promo "Experimente" imediatamente.
   if(data?.session?.access_token){
     await aplicarPromoFundador(data.session.access_token);
   }
 
   toast('Conta criada! Faça login.','ok');
   trocarModal('login');
-  atualizarVagasPromo(); // refletir imediatamente a vaga ocupada no contador
 }
 
-// Chama a rota do backend que decide se o usuário ganha os 10GB/1 ano (200 primeiros)
+// Chama a rota do backend que concede a promo "Experimente" (2GB/6 meses, sem limite de vagas)
 async function aplicarPromoFundador(accessToken){
   try{
     const resp = await fetch(API+'/api/promo/fundador',{
@@ -956,9 +929,8 @@ async function aplicarPromoFundador(accessToken){
     });
     const r = await resp.json();
     if(r?.aplicado){
-      toast('🎉 Você ganhou 10 GB grátis por 1 ano!','ok');
+      toast('🎉 Você ganhou 2 GB grátis por 6 meses!','ok');
     }
-    atualizarVagasPromo(); // sincroniza o contador com o resultado real do backend
   }catch(e){
     // Falha silenciosa: não bloqueia o cadastro se a promo não puder ser checada agora
     console.log('Promo fundador: não foi possível verificar agora.');
