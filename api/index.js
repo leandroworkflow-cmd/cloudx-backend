@@ -17,15 +17,13 @@ const getDB = () => createClient(
 
 // ── PLANOS E LIMITES (em bytes) ──
 const PLANOS = {
-  free:           1   * 1024 * 1024 * 1024,   // 1 GB (padrão, após 200 vagas ou expirar promo)
-  free_fundador:  10  * 1024 * 1024 * 1024,   // 10 GB — promo dos 30 primeiros, válida 1 ano
+  free:           1   * 1024 * 1024 * 1024,   // 1 GB (padrão, após expirar a promo)
+  free_fundador:  2   * 1024 * 1024 * 1024,   // 2 GB — promo "Experimente", válida por 6 meses, sem limite de vagas
   basico:         30  * 1024 * 1024 * 1024,   // 30 GB
   essencial:      100 * 1024 * 1024 * 1024,   // 100 GB
   plus:           300 * 1024 * 1024 * 1024,   // 300 GB
   premium:        1024 * 1024 * 1024 * 1024,  // 1 TB
 };
-
-const LIMITE_VAGAS_FUNDADOR = 30;
 
 async function auth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
@@ -57,7 +55,7 @@ app.get('/api/perfil', auth, async (req, res) => {
   res.json({ ...perfil, limite, percentual: Math.round((perfil.storage_usado / limite) * 100) });
 });
 
-// ── Chamado uma vez no cadastro (signup) para tentar aplicar a promo dos 200 primeiros ──
+// ── Chamado uma vez no cadastro (signup) para aplicar a promo "Experimente" (2GB/6 meses, sem limite de vagas) ──
 app.post('/api/promo/fundador', auth, async (req, res) => {
   const { data: perfil } = await req.db.from('perfis').select('id, plano').eq('id', req.user.id).single();
   if (!perfil) return res.status(404).json({ erro: 'Perfil não encontrado' });
@@ -67,27 +65,14 @@ app.post('/api/promo/fundador', auth, async (req, res) => {
     return res.json({ aplicado: false, motivo: 'Perfil já possui um plano' });
   }
 
-  const { count } = await req.db.from('perfis').select('id', { count: 'exact', head: true }).eq('plano', 'free_fundador');
-
-  if ((count || 0) >= LIMITE_VAGAS_FUNDADOR) {
-    return res.json({ aplicado: false, motivo: 'Promoção esgotada', vagas_restantes: 0 });
-  }
-
-  const expira = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  const expira = new Date(Date.now() + 182 * 24 * 60 * 60 * 1000).toISOString(); // 6 meses
   const { error } = await req.db.from('perfis').update({
     plano: 'free_fundador',
     plano_expira_em: expira,
   }).eq('id', req.user.id);
 
   if (error) return res.status(500).json({ erro: error.message });
-  res.json({ aplicado: true, plano: 'free_fundador', expira_em: expira, vagas_restantes: LIMITE_VAGAS_FUNDADOR - (count || 0) - 1 });
-});
-
-// ── Consulta pública: quantas vagas da promo ainda restam (pra mostrar no site) ──
-app.get('/api/promo/fundador/vagas', async (req, res) => {
-  const db = getDB();
-  const { count } = await db.from('perfis').select('id', { count: 'exact', head: true }).eq('plano', 'free_fundador');
-  res.json({ vagas_restantes: Math.max(LIMITE_VAGAS_FUNDADOR - (count || 0), 0), total: LIMITE_VAGAS_FUNDADOR });
+  res.json({ aplicado: true, plano: 'free_fundador', expira_em: expira });
 });
 
 app.get('/api/arquivos', auth, async (req, res) => {
@@ -414,7 +399,7 @@ const SYSTEM_PROMPT_CLOUDX = `Você é o assistente virtual da CloudX, um servi�
 
 INFORMAÇÕES SOBRE OS PLANOS:
 - Free: R$ 0/ano, 1 GB de armazenamento
-- Free Fundador: R$ 0, 10 GB por 1 ano (promoção limitada aos 30 primeiros cadastrados)
+- Free Fundador: R$ 0, 2 GB grátis por 6 meses (promoção "Experimente", sem limite de vagas)
 - Básico: R$ 4,99/mês, 30 GB
 - Essencial: R$ 9,99/mês, 100 GB
 - Plus: R$ 29,99/mês, 300 GB
