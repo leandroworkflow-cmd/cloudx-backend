@@ -1031,13 +1031,23 @@ async function uploadArquivos(files){
   const nome = document.getElementById('progressNome');
   progress.style.display = '';
   for(const file of files){
-    nome.textContent = 'Enviando: '+file.name; fill.style.width='20%';
-    const form = new FormData(); form.append('arquivo',file); form.append('pasta',pastaAtual);
+    nome.textContent = 'Enviando: '+file.name; fill.style.width='15%';
     try{
-      const resp = await fetch(API+'/api/arquivos/upload',{method:'POST',headers:{'Authorization':'Bearer '+token},body:form});
+      // 1) pede ao backend uma URL assinada (checa a cota e define o caminho do arquivo)
+      const info = await api('POST','/api/arquivos/upload-url',{nome:file.name,tamanho:file.size,pasta:pastaAtual});
+      if(!info || info.erro){ toast('Erro: '+(info?.erro||'não foi possível iniciar o upload'),'erro'); continue; }
+      fill.style.width = '40%';
+
+      // 2) envia o arquivo DIRETO pro Supabase Storage (não passa pela função serverless,
+      //    então não esbarra no limite de 4.5MB do Vercel)
+      const { error: upErr } = await db.storage.from('arquivos').uploadToSignedUrl(info.caminho, info.token, file, { contentType: file.type || undefined });
+      if(upErr){ toast('Erro ao enviar '+file.name+': '+upErr.message,'erro'); continue; }
+      fill.style.width = '85%';
+
+      // 3) avisa o backend que terminou, pra atualizar o espaço usado
+      await api('POST','/api/arquivos/confirmar-upload',{caminho:info.caminho,tamanho:file.size});
       fill.style.width = '100%';
-      if(!resp.ok){ const err=await resp.json(); toast('Erro: '+err.erro,'erro'); }
-      else toast(file.name+' enviado!','ok');
+      toast(file.name+' enviado!','ok');
     }catch(e){ toast('Erro de conexão','erro'); }
   }
   setTimeout(()=>{ progress.style.display='none'; fill.style.width='0%'; },600);
