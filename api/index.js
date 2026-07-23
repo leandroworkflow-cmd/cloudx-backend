@@ -1,11 +1,9 @@
 const express = require('express');
-const multer  = require('multer');
 const cors    = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const mp      = require('../mercadopago');
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
@@ -83,25 +81,35 @@ app.get('/api/arquivos', auth, async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/arquivos/upload', auth, upload.single('arquivo'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
+// ── Passo 1: gera uma URL assinada pro navegador subir o arquivo DIRETO pro Supabase Storage ──
+// (o arquivo nunca passa pela função serverless, então não bate no limite de 4.5MB do Vercel)
+app.post('/api/arquivos/upload-url', auth, async (req, res) => {
+  const { nome, tamanho, pasta } = req.body || {};
+  if (!nome || !tamanho) return res.status(400).json({ erro: 'Nome e tamanho do arquivo são obrigatórios' });
 
-  // Verifica cota antes de subir o arquivo
+  // Verifica cota antes de autorizar o upload
   const { data: perfil } = await req.db.from('perfis').select('plano, storage_usado, plano_expira_em, id').eq('id', req.user.id).single();
   if (perfil) {
     const perfilAtualizado = await resolverPlanoAtual(req.db, perfil);
     const limite = PLANOS[perfilAtualizado.plano] || PLANOS.free;
-    if (perfilAtualizado.storage_usado + req.file.size > limite) {
+    if (perfilAtualizado.storage_usado + Number(tamanho) > limite) {
       return res.status(403).json({ erro: 'Cota excedida', plano: perfilAtualizado.plano });
     }
   }
 
-  const pasta = req.body.pasta || '';
-  const caminho = `${req.user.id}${pasta ? '/' + pasta : ''}/${req.file.originalname}`;
-  const { error } = await req.db.storage.from('arquivos').upload(caminho, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
+  const caminho = `${req.user.id}${pasta ? '/' + pasta : ''}/${nome}`;
+  const { data, error } = await req.db.storage.from('arquivos').createSignedUploadUrl(caminho, { upsert: true });
   if (error) return res.status(500).json({ erro: error.message });
-  await req.db.rpc('incrementar_storage', { uid: req.user.id, bytes: req.file.size });
-  res.json({ ok: true, caminho, tamanho: req.file.size });
+  res.json({ signedUrl: data.signedUrl, token: data.token, caminho });
+});
+
+// ── Passo 2: chamado pelo navegador após o upload direto ter concluído, só pra atualizar a cota usada ──
+app.post('/api/arquivos/confirmar-upload', auth, async (req, res) => {
+  const { caminho, tamanho } = req.body || {};
+  if (!caminho || !tamanho) return res.status(400).json({ erro: 'Caminho e tamanho são obrigatórios' });
+  if (!caminho.startsWith(req.user.id)) return res.status(403).json({ erro: 'Acesso negado' });
+  await req.db.rpc('incrementar_storage', { uid: req.user.id, bytes: Number(tamanho) });
+  res.json({ ok: true, caminho, tamanho: Number(tamanho) });
 });
 
 app.get('/api/arquivos/download', auth, async (req, res) => {
