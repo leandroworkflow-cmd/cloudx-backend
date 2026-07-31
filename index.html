@@ -1317,5 +1317,42 @@ if('serviceWorker' in navigator){
     document.getElementById('cx-chat-send').disabled = false;
   }
 </script>
+<!-- ANALYTICS DE VISITANTES -->
+<script>
+(function() {
+  const ANALYTICS_API = 'https://cloudx-backend.vercel.app/api/analytics';
+
+  // Gera (ou recupera) um ID anonimo para este visitante, guardado no navegador dele
+  function getVisitorId() {
+    let id = localStorage.getItem('cx_visitor_id');
+    if (!id) {
+      id = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('cx_visitor_id', id);
+    }
+    return id;
+  }
+
+  const visitorId = getVisitorId();
+  const pagina = window.location.pathname || '/';
+  const referrer = document.referrer || null;
+
+  // Registra a visualizacao desta pagina
+  fetch(ANALYTICS_API + '/pageview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visitor_id: visitorId, pagina, referrer }),
+  }).catch(() => {});
+
+  // Envia um "sinal de vida" a cada 20 segundos enquanto a aba estiver aberta,
+  // para o dashboard saber que esse visitante ainda esta online
+  setInterval(() => {
+    fetch(ANALYTICS_API + '/heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visitor_id: visitorId, pagina }),
+    }).catch(() => {});
+  }, 20000);
+})();
+</script>
 </body>
 </html>

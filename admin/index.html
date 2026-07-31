@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CloudX — Dashboard Admin</title>
-<link rel="icon" type="image/svg+xml" href="/admin/favicon.svg">
 <style>
   :root {
     --bg: #0b0b12;
@@ -191,6 +190,7 @@
   <div class="nav-item active" data-tab="dashboard">📊 Dashboard</div>
   <div class="nav-item" data-tab="crm">👥 Leads / CRM</div>
   <div class="nav-item" data-tab="campanhas">📣 Campanhas</div>
+  <div class="nav-item" data-tab="analytics">📈 Analytics</div>
 </div>
 
 <div class="main">
@@ -315,12 +315,56 @@
     </div>
   </div>
 
+  <!-- ===== TAB: ANALYTICS ===== -->
+  <div class="tab-content" id="tab-analytics">
+    <header>
+      <div>
+        <h1>Analytics</h1>
+        <p class="subtitle">Visitantes reais do site, rastreados automaticamente</p>
+      </div>
+      <button class="refresh" onclick="carregarTudo()">↻ Atualizar</button>
+    </header>
+
+    <!-- Destaque grande: visitantes de hoje é a metrica mais importante -->
+    <div class="card" style="background:linear-gradient(135deg,rgba(124,92,255,0.15),rgba(92,157,255,0.1));border-color:var(--purple);margin-bottom:14px;">
+      <div class="label">Visitantes hoje</div>
+      <div class="value" style="font-size:48px;" id="visitantesHojeGrande">—</div>
+      <div class="delta" id="visitasHojeSub"></div>
+    </div>
+
+    <div class="grid" id="analyticsCards" style="display:none">
+      <div class="card">
+        <div class="label">🟢 Online agora</div>
+        <div class="value" id="onlineAgora">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Visualizações hoje</div>
+        <div class="value" id="visitasHoje">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Visualizações (total)</div>
+        <div class="value" id="visitasTotal">—</div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px;">
+      <h2>📅 Visitas nos últimos 14 dias</h2>
+      <div id="graficoVisitas"></div>
+    </div>
+
+    <div class="panel">
+      <h2>📄 Páginas mais acessadas (últimos 30 dias)</h2>
+      <div id="paginasLista"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
   const STATS_URL = 'https://cloudx-backend.vercel.app/dashboard/stats';
   const LEADS_URL = 'https://cloudx-backend.vercel.app/api/leads';
   const CAMPANHAS_URL = 'https://cloudx-backend.vercel.app/api/campanhas';
+  const ANALYTICS_URL = 'https://cloudx-backend.vercel.app/api/analytics/stats';
 
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -543,6 +587,50 @@
     }
   }
 
+  // ── ANALYTICS ──
+  function desenharGraficoVisitas(visitasPorDia) {
+    const box = document.getElementById('graficoVisitas');
+    if (!visitasPorDia || visitasPorDia.length === 0) {
+      box.innerHTML = '<div class="vazio">Sem dados de visitas ainda</div>';
+      return;
+    }
+    const max = Math.max(...visitasPorDia.map(d => d.visitas), 1);
+    const largura = 40, espaco = 12, altura = 140;
+    const svgLargura = visitasPorDia.length * (largura + espaco);
+
+    let barras = '';
+    visitasPorDia.forEach((d, i) => {
+      const h = (d.visitas / max) * altura;
+      const x = i * (largura + espaco);
+      const y = altura - h;
+      const dataFmt = new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      barras += `
+        <g>
+          <rect x="${x}" y="${y}" width="${largura}" height="${h || 1}" rx="4" fill="var(--purple)" opacity="0.85">
+            <title>${dataFmt}: ${d.visitas} visitas</title>
+          </rect>
+          <text x="${x + largura/2}" y="${altura + 18}" text-anchor="middle" font-size="10" fill="var(--muted)">${dataFmt}</text>
+          <text x="${x + largura/2}" y="${y - 6}" text-anchor="middle" font-size="11" fill="var(--text)" font-weight="600">${d.visitas}</text>
+        </g>
+      `;
+    });
+
+    box.innerHTML = `<svg viewBox="0 0 ${svgLargura} ${altura + 30}" style="width:100%;height:200px;overflow:visible;">${barras}</svg>`;
+  }
+
+  function preencherPaginas(paginas) {
+    const box = document.getElementById('paginasLista');
+    if (!paginas || paginas.length === 0) {
+      box.innerHTML = '<div class="vazio">Nenhuma visita registrada ainda</div>';
+      return;
+    }
+    let html = '';
+    paginas.forEach(p => {
+      html += `<div class="stat-row"><span>${p.pagina}</span><span>${p.visitas} visitas</span></div>`;
+    });
+    box.innerHTML = html;
+  }
+
   async function carregarTudo() {
     const status = document.getElementById('status');
     const erroBox = document.getElementById('erroBox');
@@ -550,14 +638,16 @@
     erroBox.innerHTML = '';
 
     try {
-      const [resStats, resLeads, resCampanhas] = await Promise.all([
+      const [resStats, resLeads, resCampanhas, resAnalytics] = await Promise.all([
         fetch(STATS_URL),
         fetch(LEADS_URL),
         fetch(CAMPANHAS_URL),
+        fetch(ANALYTICS_URL),
       ]);
       const dados = await resStats.json();
       const leads = await resLeads.json();
       const campanhas = await resCampanhas.json();
+      const analytics = await resAnalytics.json();
 
       if (!dados.ok) throw new Error(dados.erro || 'Erro desconhecido');
 
@@ -590,6 +680,17 @@
       preencherOrigem(leadsStats.porOrigem, leadsStats.total);
       renderizarTabelaLeads(Array.isArray(leads) ? leads : []);
       renderizarTabelaCampanhas(Array.isArray(campanhas) ? campanhas : []);
+
+      if (analytics.ok) {
+        document.getElementById('visitantesHojeGrande').textContent = analytics.visitantesUnicosHoje;
+        document.getElementById('visitasHojeSub').textContent = analytics.visitasHoje + ' visualizações de página hoje';
+        document.getElementById('onlineAgora').textContent = analytics.onlineAgora;
+        document.getElementById('visitasHoje').textContent = analytics.visitasHoje;
+        document.getElementById('visitasTotal').textContent = analytics.visitasTotal;
+        document.getElementById('analyticsCards').style.display = 'grid';
+        desenharGraficoVisitas(analytics.visitasPorDia);
+        preencherPaginas(analytics.paginasMaisAcessadas);
+      }
 
     } catch (e) {
       erroBox.innerHTML = `<div class="erro">❌ Erro ao carregar dados: ${e.message}</div>`;

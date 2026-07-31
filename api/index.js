@@ -481,3 +481,90 @@ app.post('/api/chatbot/lead', async (req, res) => {
   if (error) return res.status(500).json({ erro: error.message });
   res.json({ ok: true, lead: data });
 });
+
+// ============================================
+// ANALYTICS DE VISITANTES
+// ============================================
+
+// Registra uma visualizacao de pagina + marca o visitante como online
+app.post('/api/analytics/pageview', async (req, res) => {
+  const { visitor_id, pagina, referrer } = req.body;
+  if (!visitor_id || !pagina) return res.status(400).json({ erro: 'visitor_id e pagina obrigatorios' });
+  const db = getDB();
+
+  await db.from('page_views').insert({ visitor_id, pagina, referrer: referrer || null });
+  await db.from('visitantes_online').upsert({ visitor_id, pagina, updated_at: new Date().toISOString() });
+
+  res.json({ ok: true });
+});
+
+// Heartbeat: o site chama isso a cada ~20s enquanto a aba estiver aberta, pra manter o "online" atualizado
+app.post('/api/analytics/heartbeat', async (req, res) => {
+  const { visitor_id, pagina } = req.body;
+  if (!visitor_id) return res.status(400).json({ erro: 'visitor_id obrigatorio' });
+  const db = getDB();
+
+  await db.from('visitantes_online').upsert({ visitor_id, pagina: pagina || null, updated_at: new Date().toISOString() });
+  res.json({ ok: true });
+});
+
+// Estatisticas para o dashboard
+app.get('/api/analytics/stats', async (req, res) => {
+  try {
+    const db = getDB();
+    const agora = new Date();
+    const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).toISOString();
+    const cincoMinAtras = new Date(agora.getTime() - 5 * 60 * 1000).toISOString();
+    const trintaDiasAtras = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Total de visualizacoes hoje
+    const { count: visitasHoje } = await db.from('page_views').select('id', { count: 'exact', head: true }).gte('created_at', inicioHoje);
+
+    // Total de visualizacoes de sempre
+    const { count: visitasTotal } = await db.from('page_views').select('id', { count: 'exact', head: true });
+
+    // Visitantes online agora (heartbeat nos ultimos 5 minutos)
+    const { count: onlineAgora } = await db.from('visitantes_online').select('visitor_id', { count: 'exact', head: true }).gte('updated_at', cincoMinAtras);
+
+    // Visitantes unicos hoje
+    const { data: visitantesHojeData } = await db.from('page_views').select('visitor_id').gte('created_at', inicioHoje);
+    const visitantesUnicosHoje = new Set((visitantesHojeData || []).map(v => v.visitor_id)).size;
+
+    // Paginas mais acessadas (ultimos 30 dias)
+    const { data: paginasData } = await db.from('page_views').select('pagina').gte('created_at', trintaDiasAtras);
+    const contagemPaginas = {};
+    (paginasData || []).forEach(p => { contagemPaginas[p.pagina] = (contagemPaginas[p.pagina] || 0) + 1; });
+    const paginasMaisAcessadas = Object.entries(contagemPaginas)
+      .map(([pagina, visitas]) => ({ pagina, visitas }))
+      .sort((a, b) => b.visitas - a.visitas)
+      .slice(0, 8);
+
+    // Visitas por dia (ultimos 14 dias, para o grafico)
+    const catorzeDiasAtras = new Date(agora.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: visitasPorDiaData } = await db.from('page_views').select('created_at').gte('created_at', catorzeDiasAtras);
+    const contagemPorDia = {};
+    (visitasPorDiaData || []).forEach(v => {
+      const dia = v.created_at.slice(0, 10); // YYYY-MM-DD
+      contagemPorDia[dia] = (contagemPorDia[dia] || 0) + 1;
+    });
+    // Preenche os 14 dias mesmo os que tiveram 0 visitas, para o grafico ficar completo
+    const visitasPorDia = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(agora.getTime() - i * 24 * 60 * 60 * 1000);
+      const chave = d.toISOString().slice(0, 10);
+      visitasPorDia.push({ data: chave, visitas: contagemPorDia[chave] || 0 });
+    }
+
+    res.json({
+      ok: true,
+      visitasHoje: visitasHoje || 0,
+      visitasTotal: visitasTotal || 0,
+      onlineAgora: onlineAgora || 0,
+      visitantesUnicosHoje,
+      paginasMaisAcessadas,
+      visitasPorDia,
+    });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
