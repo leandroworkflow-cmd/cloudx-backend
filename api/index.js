@@ -208,6 +208,7 @@ app.get("/", (req, res) => { res.sendFile(path.join(root, "index.html")); });
 app.get("/manifest.json", (req, res) => { res.sendFile(path.join(root, "manifest.json")); });
 app.get("/sw.js", (req, res) => { res.setHeader("Content-Type","application/javascript"); res.sendFile(path.join(root, "sw.js")); });
 app.get("/icon.svg", (req, res) => { res.sendFile(path.join(root, "icon.svg")); });
+app.get("/favicon.ico", (req, res) => { res.sendFile(path.join(root, "favicon.ico")); });
 app.get("/icon-192.png", (req, res) => { res.sendFile(path.join(root, "icon-192.png")); });
 app.get("/icon-512.png", (req, res) => { res.sendFile(path.join(root, "icon-512.png")); });
 app.get("/sucesso", (req, res) => { res.sendFile(path.join(root, "sucesso.html")); });
