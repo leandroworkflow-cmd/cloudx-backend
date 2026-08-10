@@ -147,7 +147,7 @@ nav{background:rgba(11,7,32,0.85);backdrop-filter:blur(14px);border-bottom:1px s
 @media(max-width:480px){
   .plan-counter-circle{width:68px;height:68px;top:-20px;left:-20px;}
   .plan-counter-circle .num{font-size:19px;}
-  .plans-grid{display:flex;flex-direction:row;overflow-x:auto;gap:14px;padding-bottom:16px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;margin-top:28px;grid-template-columns:unset;}
+  .plans-grid{display:flex;flex-direction:row;overflow-x:auto;gap:14px;padding-top:20px;padding-bottom:16px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;margin-top:28px;grid-template-columns:unset;}
   .plans-grid::-webkit-scrollbar{height:4px;}
   .plans-grid::-webkit-scrollbar-thumb{background:rgba(139,92,246,0.4);border-radius:2px;}
   .plan-card{min-width:240px;flex-shrink:0;scroll-snap-align:start;}
@@ -770,6 +770,23 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
 </div>
 
 <script>
+function abrirPagina(p){
+  event && event.preventDefault();
+  const ids = {sobre:'modalSobre', termos:'modalTermos'};
+  if(ids[p]){ document.getElementById(ids[p]).style.display='block'; document.body.style.overflow='hidden'; }
+}
+function fecharPagina(p){
+  const ids = {sobre:'modalSobre', termos:'modalTermos'};
+  if(ids[p]){ document.getElementById(ids[p]).style.display='none'; document.body.style.overflow=''; }
+}
+// fechar modal ao clicar fora
+document.addEventListener('click', function(e){
+  ['modalSobre','modalTermos'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && e.target === el){ el.style.display='none'; document.body.style.overflow=''; }
+  });
+});
+
 function toggleFaq(el){
   const item = el.closest('.faq-item');
   const jaAberto = item.classList.contains('open');
@@ -843,15 +860,15 @@ async function enviarLeadFormulario(ev){
       </div>
       <div class="footer-col">
         <div class="footer-col-title">Empresa</div>
-        <span>Sobre nós</span>
+        <a href="#sobre" onclick="abrirPagina('sobre')">Sobre nós</a>
         <a href="#contato">Contato</a>
-        <span>Blog</span>
+        <a href="#termos" onclick="abrirPagina('termos')">Termos de uso</a>
       </div>
       <div class="footer-col">
         <div class="footer-col-title">Suporte</div>
-        <span>Central de ajuda</span>
-        <span>Tutoriais</span>
-        <span>Status</span>
+        <a href="mailto:suportecloudx@outlook.com">suportecloudx@outlook.com</a>
+        <a href="tel:+553108373004">(31) 08373-3004</a>
+        <a href="#contato">Falar com suporte</a>
       </div>
     </div>
     <div class="footer-copy">© 2026 CloudX. Todos os direitos reservados.</div>
@@ -859,6 +876,62 @@ async function enviarLeadFormulario(ev){
 </footer>
 
 </div><!-- /landing -->
+
+<!-- ═══ MODAL SOBRE NÓS ═══ -->
+<div id="modalSobre" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);overflow-y:auto;padding:40px 16px;">
+  <div style="max-width:600px;margin:0 auto;background:#0f0e1a;border:1px solid #1e1b3a;border-radius:20px;padding:40px 32px;position:relative;">
+    <button onclick="fecharPagina('sobre')" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#a78bfa;font-size:24px;cursor:pointer;">✕</button>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="36" height="36"><defs><linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#7c3aed"/><stop offset="100%" style="stop-color:#4f46e5"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(#g2)"/><text x="50" y="68" font-size="54" text-anchor="middle" fill="white" font-family="Arial Black,sans-serif" font-weight="900">C</text></svg>
+      <span style="font-size:22px;font-weight:800;color:#fff;">CloudX</span>
+    </div>
+    <h2 style="font-size:24px;font-weight:800;color:#fff;margin-bottom:16px;">Sobre nós</h2>
+    <p style="color:#a78bfa;line-height:1.7;margin-bottom:16px;">O <strong style="color:#fff;">CloudX</strong> nasceu com uma missão simples: oferecer armazenamento em nuvem seguro, acessível e fácil de usar para qualquer pessoa no Brasil.</p>
+    <p style="color:#a78bfa;line-height:1.7;margin-bottom:16px;">Acreditamos que guardar seus arquivos, fotos, vídeos e projetos não deveria ser complicado nem caro. Por isso criamos uma plataforma intuitiva, com planos para todos os bolsos e segurança de ponta a ponta.</p>
+    <p style="color:#a78bfa;line-height:1.7;margin-bottom:24px;">Nossos servidores ficam ativos 24 horas por dia, 7 dias por semana, garantindo que seus dados estejam sempre disponíveis quando você precisar.</p>
+    <div style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:12px;padding:20px;">
+      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:12px;">Fale conosco</div>
+      <div style="font-size:13px;color:#a78bfa;margin-bottom:6px;">📧 <a href="mailto:suportecloudx@outlook.com" style="color:#a78bfa;">suportecloudx@outlook.com</a></div>
+      <div style="font-size:13px;color:#a78bfa;">📞 <a href="tel:+553108373004" style="color:#a78bfa;">(31) 08373-3004</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL TERMOS DE USO ═══ -->
+<div id="modalTermos" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);overflow-y:auto;padding:40px 16px;">
+  <div style="max-width:600px;margin:0 auto;background:#0f0e1a;border:1px solid #1e1b3a;border-radius:20px;padding:40px 32px;position:relative;">
+    <button onclick="fecharPagina('termos')" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#a78bfa;font-size:24px;cursor:pointer;">✕</button>
+    <h2 style="font-size:24px;font-weight:800;color:#fff;margin-bottom:8px;">Termos de Uso</h2>
+    <p style="font-size:12px;color:#6b6294;margin-bottom:24px;">Última atualização: agosto de 2026</p>
+
+    <div style="display:flex;flex-direction:column;gap:20px;">
+      <div>
+        <h3 style="font-size:15px;font-weight:700;color:#c4b5fd;margin-bottom:8px;">1. Aceitação dos termos</h3>
+        <p style="font-size:13px;color:#a78bfa;line-height:1.7;">Ao criar uma conta e utilizar o CloudX, você concorda integralmente com estes Termos de Uso. Caso não concorde, pedimos que não utilize nossos serviços.</p>
+      </div>
+      <div>
+        <h3 style="font-size:15px;font-weight:700;color:#c4b5fd;margin-bottom:8px;">2. Uso do serviço</h3>
+        <p style="font-size:13px;color:#a78bfa;line-height:1.7;">O CloudX destina-se ao armazenamento de arquivos pessoais e profissionais lícitos. É proibido armazenar conteúdo ilegal, malicioso, ou que viole direitos de terceiros.</p>
+      </div>
+      <div>
+        <h3 style="font-size:15px;font-weight:700;color:#c4b5fd;margin-bottom:8px;">3. Privacidade e segurança</h3>
+        <p style="font-size:13px;color:#a78bfa;line-height:1.7;">Seus arquivos são protegidos com criptografia avançada. Não compartilhamos seus dados com terceiros sem sua autorização, exceto quando exigido por lei.</p>
+      </div>
+      <div>
+        <h3 style="font-size:15px;font-weight:700;color:#c4b5fd;margin-bottom:8px;">4. Planos e pagamentos</h3>
+        <p style="font-size:13px;color:#a78bfa;line-height:1.7;">Os planos pagos são cobrados mensalmente. O cancelamento pode ser feito a qualquer momento, com garantia de reembolso em até 7 dias após a contratação.</p>
+      </div>
+      <div>
+        <h3 style="font-size:15px;font-weight:700;color:#c4b5fd;margin-bottom:8px;">5. Responsabilidades</h3>
+        <p style="font-size:13px;color:#a78bfa;line-height:1.7;">O CloudX não se responsabiliza por perdas de dados causadas por uso indevido da conta pelo próprio usuário. Recomendamos sempre manter backups locais de arquivos críticos.</p>
+      </div>
+      <div>
+        <h3 style="font-size:15px;font-weight:700;color:#c4b5fd;margin-bottom:8px;">6. Contato</h3>
+        <p style="font-size:13px;color:#a78bfa;line-height:1.7;">Dúvidas sobre estes termos? Entre em contato: <a href="mailto:suportecloudx@outlook.com" style="color:#c4b5fd;">suportecloudx@outlook.com</a> ou <a href="tel:+553108373004" style="color:#c4b5fd;">(31) 08373-3004</a>.</p>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ═══ AUTH MODAL ═══ -->
 <div class="auth-overlay" id="authOverlay" onclick="if(event.target===this)fecharAuth()">
