@@ -1099,6 +1099,34 @@ const SUPABASE_URL = 'https://inlhoaccvtvxipvuiidh.supabase.co';
 const SUPABASE_KEY = 'sb_publishable__eLNNzgBEC7InhI_YWhg1w_3xGEXRLm';
 const API = 'https://cloudx-backend.vercel.app';
 
+// ── ANALYTICS TRACKING ──
+(function(){
+  // gera ou recupera visitor_id persistente
+  let vid = localStorage.getItem('_cx_vid');
+  if(!vid){ vid = 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2); localStorage.setItem('_cx_vid', vid); }
+
+  function track(){
+    fetch(API+'/api/analytics/pageview', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ visitor_id: vid, pagina: location.pathname || '/', referrer: document.referrer || '' })
+    }).catch(()=>{});
+  }
+
+  function heartbeat(){
+    fetch(API+'/api/analytics/heartbeat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ visitor_id: vid, pagina: location.pathname || '/' })
+    }).catch(()=>{});
+  }
+
+  // dispara pageview assim que carregar
+  track();
+  // heartbeat a cada 2 minutos para manter "online agora" preciso
+  setInterval(heartbeat, 120000);
+})();
+
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { detectSessionInUrl: true, flowType: 'implicit' }
