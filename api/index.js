@@ -17,11 +17,29 @@ const getDB = () => createClient(
 const PLANOS = {
   free:           1   * 1024 * 1024 * 1024,   // 1 GB (padrão, após expirar a promo)
   free_fundador:  2   * 1024 * 1024 * 1024,   // 2 GB — promo "Experimente", válida por 6 meses, sem limite de vagas
+  free_campanha:  20  * 1024 * 1024 * 1024,   // 20 GB — CAMPANHA por tempo limitado (72h), válida por 6 meses
   basico:         30  * 1024 * 1024 * 1024,   // 30 GB
   essencial:      100 * 1024 * 1024 * 1024,   // 100 GB
   plus:           300 * 1024 * 1024 * 1024,   // 300 GB
   premium:        1024 * 1024 * 1024 * 1024,  // 1 TB
 };
+
+// ── CAMPANHA 20 GB / 72h ──
+// Defina PROMO_CAMPANHA_FIM (ISO 8601, ex.: 2026-10-01T23:59:59-03:00) nas variáveis de ambiente
+// para controlar o fim da campanha sem mexer no código. Ex.: hora da publicação + 72h.
+const CAMPANHA_FIM = new Date(process.env.PROMO_CAMPANHA_FIM || '2026-10-01T23:59:59-03:00');
+const campanhaAtiva = () => Date.now() < CAMPANHA_FIM.getTime();
+
+// Público: o front usa para montar o contador (usa a hora do servidor, não a do aparelho)
+app.get('/api/promo/campanha', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    ativa: campanhaAtiva(),
+    fim: CAMPANHA_FIM.toISOString(),
+    agora: new Date().toISOString(),
+    gb: campanhaAtiva() ? 20 : 2,
+  });
+});
 
 async function auth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
@@ -37,7 +55,7 @@ async function auth(req, res, next) {
 // ── Aplica/expira a promoção "free_fundador" antes de devolver o perfil ──
 async function resolverPlanoAtual(db, perfil) {
   // Se a promo expirou, rebaixa pra free padrão
-  if (perfil.plano === 'free_fundador' && perfil.plano_expira_em && new Date(perfil.plano_expira_em) < new Date()) {
+  if (['free_fundador', 'free_campanha'].includes(perfil.plano) && perfil.plano_expira_em && new Date(perfil.plano_expira_em) < new Date()) {
     await db.from('perfis').update({ plano: 'free', plano_expira_em: null }).eq('id', perfil.id);
     perfil.plano = 'free';
     perfil.plano_expira_em = null;
@@ -63,14 +81,16 @@ app.post('/api/promo/fundador', auth, async (req, res) => {
     return res.json({ aplicado: false, motivo: 'Perfil já possui um plano' });
   }
 
+  // Durante a campanha: 20 GB. Depois que acabar: volta ao "Experimente" de 2 GB.
+  const plano = campanhaAtiva() ? 'free_campanha' : 'free_fundador';
   const expira = new Date(Date.now() + 182 * 24 * 60 * 60 * 1000).toISOString(); // 6 meses
   const { error } = await req.db.from('perfis').update({
-    plano: 'free_fundador',
+    plano,
     plano_expira_em: expira,
   }).eq('id', req.user.id);
 
   if (error) return res.status(500).json({ erro: error.message });
-  res.json({ aplicado: true, plano: 'free_fundador', expira_em: expira });
+  res.json({ aplicado: true, plano, limite: PLANOS[plano], expira_em: expira });
 });
 
 app.get('/api/arquivos', auth, async (req, res) => {
@@ -290,7 +310,7 @@ app.get('/dashboard/stats', async (req, res) => {
     const listaLeads = erroLeads ? [] : (leads || []);
 
     const totalUsuarios = perfis.length;
-    const porPlano = { free: 0, free_fundador: 0, basico: 0, essencial: 0, plus: 0, premium: 0 };
+    const porPlano = { free: 0, free_fundador: 0, free_campanha: 0, basico: 0, essencial: 0, plus: 0, premium: 0 };
     let storageTotalUsado = 0;
 
     perfis.forEach(p => {
@@ -408,7 +428,7 @@ const SYSTEM_PROMPT_CLOUDX = `Você é o assistente virtual da CloudX, um servi�
 
 INFORMAÇÕES SOBRE OS PLANOS:
 - Free: R$ 0/ano, 1 GB de armazenamento
-- Free Fundador: R$ 0, 2 GB grátis por 6 meses (promoção "Experimente", sem limite de vagas)
+- CAMPANHA POR TEMPO LIMITADO (72 horas): 20 GB grátis por 6 meses para quem criar conta, sem cartão de crédito. Depois que a campanha acabar, a promoção "Experimente" volta a ser de 2 GB grátis por 6 meses.
 - Básico: R$ 4,99/mês, 30 GB
 - Essencial: R$ 9,99/mês, 100 GB
 - Plus: R$ 29,99/mês, 300 GB
