@@ -396,9 +396,19 @@ function mascararEmail(email) {
   return usuario.slice(0, 2) + '***@' + dominio;
 }
 
+// E-mails completos só aparecem se a variável ADMIN_TOKEN existir e o painel enviar o mesmo token
+function tokenAdminValido(req) {
+  const esperado = process.env.ADMIN_TOKEN || '';
+  const recebido = String(req.headers['x-admin-token'] || '');
+  if (!esperado || !recebido) return false;
+  const a = Buffer.from(esperado), b = Buffer.from(recebido);
+  return a.length === b.length && require('crypto').timingSafeEqual(a, b);
+}
+
 app.get('/api/admin/resumo', async (req, res) => {
   try {
     const db = getDB();
+    const emailCompleto = tokenAdminValido(req);
     const agora = Date.now();
     const t0 = Date.now();
 
@@ -517,7 +527,7 @@ app.get('/api/admin/resumo', async (req, res) => {
         const p = perfilPorId.get(u.id) || {};
         const ultimo = u.last_sign_in_at ? Date.parse(u.last_sign_in_at) : 0;
         return {
-          email: mascararEmail(u.email),
+          email: emailCompleto ? (u.email || '—') : mascararEmail(u.email),
           plano: p.plano || 'free',
           criadoEm: u.created_at,
           ultimoAcesso: u.last_sign_in_at || null,
@@ -543,6 +553,7 @@ app.get('/api/admin/resumo', async (req, res) => {
         totalArquivos,
       },
       crescimento: { usuarios30dPercentual: crescimentoUsuarios30d, novos30dias: novos30, variacaoCadastros },
+      emailCompleto,
       ultimosCadastros,
     });
   } catch (e) {
