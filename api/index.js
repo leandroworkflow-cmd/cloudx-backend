@@ -364,6 +364,193 @@ app.get('/dashboard/stats', async (req, res) => {
 });
 
 // ============================================
+// DASHBOARD EXECUTIVO — visão geral da empresa
+// GET /api/admin/resumo
+// ============================================
+const PRECOS_MRR = { basico: 4.99, essencial: 9.99, plus: 29.99, premium: 49.99 };
+const PLANOS_PAGOS = Object.keys(PRECOS_MRR);
+const PLANOS_PROMO = ['free_fundador', 'free_campanha'];
+const DIA_MS = 24 * 60 * 60 * 1000;
+const GB_BYTES = 1024 ** 3;
+
+// Dia no fuso de Brasília (UTC-3), formato AAAA-MM-DD
+const chaveDiaBR = (ms) => new Date(ms - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+// Lê TODOS os usuários do Supabase Auth (paginado)
+async function listarTodosUsuarios(db) {
+  const todos = [];
+  for (let pagina = 1; pagina <= 50; pagina++) {
+    const { data, error } = await db.auth.admin.listUsers({ page: pagina, perPage: 1000 });
+    if (error) throw error;
+    const lote = (data && data.users) || [];
+    todos.push(...lote);
+    if (lote.length < 1000) break;
+  }
+  return todos;
+}
+
+// Esconde parte do e-mail (o endpoint é aberto, então não expomos e-mails completos)
+function mascararEmail(email) {
+  if (!email || !email.includes('@')) return '—';
+  const [usuario, dominio] = email.split('@');
+  return usuario.slice(0, 2) + '***@' + dominio;
+}
+
+app.get('/api/admin/resumo', async (req, res) => {
+  try {
+    const db = getDB();
+    const agora = Date.now();
+    const t0 = Date.now();
+
+    const [usuarios, perfisRes] = await Promise.all([
+      listarTodosUsuarios(db),
+      db.from('perfis').select('id, plano, storage_usado, plano_expira_em'),
+    ]);
+    if (perfisRes.error) throw perfisRes.error;
+    const perfis = perfisRes.data || [];
+    const latenciaMs = Date.now() - t0;
+
+    const perfilPorId = new Map(perfis.map(p => [p.id, p]));
+
+    // ── Usuários: ativos x inativos (ativo = entrou nos últimos 30 dias) ──
+    const totalUsuarios = usuarios.length;
+    let ativos = 0;
+    usuarios.forEach(u => {
+      const ultimo = u.last_sign_in_at ? Date.parse(u.last_sign_in_at) : 0;
+      if (ultimo && agora - ultimo <= 30 * DIA_MS) ativos++;
+    });
+    const inativos = totalUsuarios - ativos;
+
+    // ── Novos cadastros: hoje / 7 dias / 30 dias + série diária de 30 dias ──
+    const contagemPorDia = {};
+    let novos7 = 0, novos30 = 0, novos30Anteriores = 0;
+    usuarios.forEach(u => {
+      const criado = Date.parse(u.created_at);
+      if (!criado) return;
+      const k = chaveDiaBR(criado);
+      contagemPorDia[k] = (contagemPorDia[k] || 0) + 1;
+      const idade = agora - criado;
+      if (idade <= 7 * DIA_MS) novos7++;
+      if (idade <= 30 * DIA_MS) novos30++;
+      else if (idade <= 60 * DIA_MS) novos30Anteriores++;
+    });
+    const cadastrosPorDia = [];
+    for (let i = 29; i >= 0; i--) {
+      const k = chaveDiaBR(agora - i * DIA_MS);
+      cadastrosPorDia.push({ data: k, cadastros: contagemPorDia[k] || 0 });
+    }
+    const novosHoje = contagemPorDia[chaveDiaBR(agora)] || 0;
+
+    // ── Assinaturas, MRR, churn e armazenamento ──
+    const porPlano = {};
+    const mrrPorPlano = {};
+    let gratuitas = 0, pagas = 0, vencidas = 0;
+    let mrr = 0, churn30 = 0, receitaPerdida = 0;
+    let storageUsado = 0, cotaAlocada = 0;
+
+    perfis.forEach(p => {
+      const plano = p.plano || 'free';
+      const expira = p.plano_expira_em ? Date.parse(p.plano_expira_em) : null;
+      const pago = PLANOS_PAGOS.includes(plano);
+      const venceu = !!expira && expira < agora;
+
+      let planoEfetivo = plano;
+      if (pago && venceu) {
+        vencidas++;
+        planoEfetivo = 'free';
+        if (agora - expira <= 30 * DIA_MS) { churn30++; receitaPerdida += PRECOS_MRR[plano]; }
+      } else if (pago) {
+        pagas++;
+        mrr += PRECOS_MRR[plano];
+        mrrPorPlano[plano] = (mrrPorPlano[plano] || 0) + PRECOS_MRR[plano];
+      } else {
+        gratuitas++;
+        if (PLANOS_PROMO.includes(plano) && venceu) planoEfetivo = 'free';
+      }
+
+      porPlano[planoEfetivo] = (porPlano[planoEfetivo] || 0) + 1;
+      storageUsado += p.storage_usado || 0;
+      cotaAlocada += PLANOS[planoEfetivo] || PLANOS.free;
+    });
+
+    const baseChurn = pagas + churn30;
+    const taxaChurn = baseChurn > 0 ? Math.round((churn30 / baseChurn) * 1000) / 10 : 0;
+
+    // ── Capacidade: usa CAPACIDADE_TOTAL_GB (limite real do Supabase) se existir; senão soma das cotas ──
+    const capacidadeEnv = Number(process.env.CAPACIDADE_TOTAL_GB);
+    const capacidadeBytes = capacidadeEnv > 0 ? capacidadeEnv * GB_BYTES : cotaAlocada;
+    const capacidadeFonte = capacidadeEnv > 0 ? 'infraestrutura' : 'cotas';
+    const percentualStorage = capacidadeBytes > 0 ? Math.round((storageUsado / capacidadeBytes) * 1000) / 10 : 0;
+
+    // ── Número de arquivos (precisa da função SQL admin_contar_arquivos; se não existir, vem null) ──
+    let totalArquivos = null;
+    try {
+      const { data, error } = await db.rpc('admin_contar_arquivos');
+      if (!error && data !== null && data !== undefined) totalArquivos = Number(data);
+    } catch (e) { /* ignora */ }
+
+    // ── Crescimento ──
+    const baseUsuarios30dAtras = totalUsuarios - novos30;
+    const crescimentoUsuarios30d = baseUsuarios30dAtras > 0
+      ? Math.round((novos30 / baseUsuarios30dAtras) * 1000) / 10
+      : (novos30 > 0 ? 100 : 0);
+    const variacaoCadastros = novos30Anteriores > 0
+      ? Math.round(((novos30 - novos30Anteriores) / novos30Anteriores) * 100)
+      : null;
+
+    // ── Saúde operacional / alertas ──
+    const alertas = [];
+    if (percentualStorage >= 90) alertas.push({ nivel: 'critico', texto: `Armazenamento em ${percentualStorage}% — ação necessária` });
+    else if (percentualStorage >= 80) alertas.push({ nivel: 'atencao', texto: `Armazenamento em ${percentualStorage}% da capacidade` });
+    if (taxaChurn >= 20) alertas.push({ nivel: 'critico', texto: `Cancelamento (churn) em ${taxaChurn}%` });
+    else if (taxaChurn >= 10) alertas.push({ nivel: 'atencao', texto: `Cancelamento (churn) em ${taxaChurn}%` });
+    if (latenciaMs > 3000) alertas.push({ nivel: 'atencao', texto: `Banco de dados lento (${latenciaMs} ms)` });
+    if (totalUsuarios > 0 && novos7 === 0) alertas.push({ nivel: 'atencao', texto: 'Nenhum cadastro nos últimos 7 dias' });
+    const status = alertas.some(a => a.nivel === 'critico') ? 'critico'
+                 : alertas.length ? 'atencao' : 'ok';
+
+    // ── Últimos cadastros ──
+    const ultimosCadastros = [...usuarios]
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+      .slice(0, 8)
+      .map(u => {
+        const p = perfilPorId.get(u.id) || {};
+        const ultimo = u.last_sign_in_at ? Date.parse(u.last_sign_in_at) : 0;
+        return {
+          email: mascararEmail(u.email),
+          plano: p.plano || 'free',
+          criadoEm: u.created_at,
+          ultimoAcesso: u.last_sign_in_at || null,
+          ativo: !!ultimo && agora - ultimo <= 30 * DIA_MS,
+        };
+      });
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      ok: true,
+      geradoEm: new Date(agora).toISOString(),
+      saude: { status, latenciaMs, alertas },
+      usuarios: { total: totalUsuarios, ativos, inativos },
+      cadastros: { hoje: novosHoje, ultimos7dias: novos7, ultimos30dias: novos30, anteriores30dias: novos30Anteriores, variacaoPercentual: variacaoCadastros, porDia: cadastrosPorDia },
+      assinaturas: { gratuitas, pagas, vencidas, porPlano, mrrPorPlano: Object.fromEntries(Object.entries(mrrPorPlano).map(([k, v]) => [k, Math.round(v * 100) / 100])) },
+      receita: { mrr: Math.round(mrr * 100) / 100, arr: Math.round(mrr * 12 * 100) / 100 },
+      churn: { taxa: taxaChurn, cancelados30dias: churn30, receitaPerdida: Math.round(receitaPerdida * 100) / 100 },
+      armazenamento: {
+        usadoBytes: storageUsado,
+        capacidadeBytes,
+        capacidadeFonte,
+        percentual: percentualStorage,
+        totalArquivos,
+      },
+      crescimento: { usuarios30dPercentual: crescimentoUsuarios30d, novos30dias: novos30, variacaoCadastros },
+      ultimosCadastros,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, erro: e.message });
+  }
+});
+
+// ============================================
 // ROTAS DE CAMPANHAS
 // ============================================
 

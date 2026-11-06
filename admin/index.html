@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CloudX — Dashboard Admin</title>
+<title>CloudX — Painel Administrativo</title>
 <style>
   :root {
-    --bg: #0b0b12;
-    --sidebar: #111119;
-    --card: #15151f;
-    --border: #262635;
-    --purple: #7c5cff;
-    --purple-light: #9c85ff;
+    --bg: #0a1220;
+    --sidebar: #0d1626;
+    --card: #111c30;
+    --border: #1f2f4a;
+    --purple: #3b82f6;
+    --purple-light: #7cb4ff;
     --text: #e8e8f0;
     --muted: #8b8b9e;
     --green: #3ddc84;
@@ -60,7 +60,7 @@
     margin-bottom: 2px;
   }
   .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
-  .nav-item.active { background: rgba(124,92,255,0.15); color: var(--purple-light); font-weight: 600; }
+  .nav-item.active { background: rgba(59,130,246,0.15); color: var(--purple-light); font-weight: 600; }
 
   .main { flex: 1; padding: 32px 40px; overflow-x: hidden; }
   header {
@@ -98,7 +98,7 @@
   .badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
   .badge.novo { background: rgba(92,157,255,0.15); color: var(--blue); }
   .badge.em_conversa { background: rgba(255,200,87,0.15); color: var(--yellow); }
-  .badge.qualificado { background: rgba(124,92,255,0.15); color: var(--purple-light); }
+  .badge.qualificado { background: rgba(59,130,246,0.15); color: var(--purple-light); }
   .badge.convertido { background: rgba(61,220,132,0.15); color: var(--green); }
   .badge.perdido { background: rgba(255,92,108,0.15); color: var(--red); }
 
@@ -178,6 +178,50 @@
     border-radius: 6px; padding: 5px 9px; font-size: 11px; cursor: pointer;
   }
   .btn-excluir:hover { background: rgba(255,92,108,0.1); }
+
+  /* ── Visão Geral (dashboard executivo) ── */
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .saude-pill { font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 20px; white-space: nowrap; }
+  .saude-pill.ok { background: rgba(61,220,132,0.12); color: var(--green); }
+  .saude-pill.atencao { background: rgba(255,200,87,0.14); color: var(--yellow); }
+  .saude-pill.critico { background: rgba(255,92,108,0.15); color: var(--red); }
+  .alerta { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }
+  .alerta.atencao { background: rgba(255,200,87,0.1); border: 1px solid rgba(255,200,87,0.4); color: var(--yellow); }
+  .alerta.critico { background: rgba(255,92,108,0.1); border: 1px solid rgba(255,92,108,0.5); color: var(--red); }
+  .grid.kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .card.kpi .value { font-size: 30px; }
+  .delta.neutro { color: var(--muted); }
+  .delta.negativo { color: var(--red); }
+  .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+  .panel-head h2 { margin-bottom: 0; }
+  .row-main { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .chips { display: flex; gap: 8px; }
+  .chip { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; text-align: center; min-width: 64px; }
+  .chip span { display: block; font-size: 17px; font-weight: 700; }
+  .chip small { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .storage-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mini { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .mini .label { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .mini .value { font-size: 22px; font-weight: 700; }
+  .link-aba { color: var(--purple-light); font-size: 12px; cursor: pointer; text-decoration: none; font-weight: 600; }
+  .link-aba:hover { text-decoration: underline; }
+  .barra { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .barra > div { height: 100%; border-radius: 4px; }
+  .assin-top { display: flex; align-items: center; gap: 22px; margin-bottom: 14px; flex-wrap: wrap; }
+  .legenda-item { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 6px; }
+  .legenda-item i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .badge.ativo { background: rgba(61,220,132,0.15); color: var(--green); }
+  .badge.inativo { background: rgba(255,92,108,0.15); color: var(--red); }
+  @media (max-width: 900px) {
+    body { flex-direction: column; }
+    .sidebar { width: 100%; display: flex; flex-wrap: wrap; gap: 4px; padding: 12px; border-right: none; border-bottom: 1px solid var(--border); }
+    .logo { padding: 0 8px; width: 100%; }
+    .main { padding: 20px 16px; }
+    .row-main, .row2 { grid-template-columns: 1fr; }
+    .mini-grid { grid-template-columns: repeat(2, 1fr); }
+    header { flex-wrap: wrap; gap: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -187,44 +231,103 @@
     <div class="logo-icon">☁️</div>
     CloudX
   </div>
-  <div class="nav-item active" data-tab="dashboard">📊 Dashboard</div>
+  <div class="nav-item active" data-tab="dashboard">📊 Visão geral</div>
   <div class="nav-item" data-tab="crm">👥 Leads / CRM</div>
   <div class="nav-item" data-tab="campanhas">📣 Campanhas</div>
-  <div class="nav-item" data-tab="analytics">📈 Analytics</div>
+  <div class="nav-item" data-tab="analytics">📈 Visitas</div>
 </div>
 
 <div class="main">
 
-  <!-- ===== TAB: DASHBOARD GERAL ===== -->
+  <!-- ===== TAB: VISÃO GERAL (DASHBOARD EXECUTIVO) ===== -->
   <div class="tab-content active" id="tab-dashboard">
     <header>
       <div>
-        <h1>Dashboard — CloudX</h1>
+        <h1>Visão Geral — CloudX</h1>
         <p class="subtitle" id="status">Carregando dados reais...</p>
       </div>
-      <button class="refresh" onclick="carregarTudo()">↻ Atualizar</button>
+      <div class="header-right">
+        <span class="saude-pill ok" id="saudePill">● Verificando...</span>
+        <button class="refresh" onclick="carregarTudo()">↻ Atualizar</button>
+      </div>
     </header>
 
     <div id="erroBox"></div>
+    <div id="alertasBox"></div>
 
-    <div class="grid" id="cards" style="display:none">
-      <div class="card">
+    <!-- Indicadores principais -->
+    <div class="grid kpis" id="cards" style="display:none">
+      <div class="card kpi">
         <div class="label">Total de usuários</div>
-        <div class="value" id="totalUsuarios">—</div>
+        <div class="value" id="kpiTotal">—</div>
+        <div class="delta" id="kpiTotalSub"></div>
       </div>
-      <div class="card">
-        <div class="label">Armazenamento usado</div>
-        <div class="value" id="storageTotal">—</div>
+      <div class="card kpi">
+        <div class="label">Usuários ativos</div>
+        <div class="value" id="kpiAtivos">—</div>
+        <div class="delta neutro" id="kpiAtivosSub">acessaram nos últimos 30 dias</div>
       </div>
-      <div class="card">
-        <div class="label">Receita mensal estimada</div>
-        <div class="value" id="receitaMensal">—</div>
+      <div class="card kpi">
+        <div class="label">Usuários inativos</div>
+        <div class="value" id="kpiInativos">—</div>
+        <div class="delta neutro" id="kpiInativosSub"></div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Receita mensal (MRR)</div>
+        <div class="value" id="kpiMrr">—</div>
+        <div class="delta neutro" id="kpiMrrSub"></div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Taxa de cancelamento</div>
+        <div class="value" id="kpiChurn">—</div>
+        <div class="delta neutro" id="kpiChurnSub"></div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Crescimento (30 dias)</div>
+        <div class="value" id="kpiCresc">—</div>
+        <div class="delta neutro" id="kpiCrescSub"></div>
       </div>
     </div>
 
-    <div class="panel" id="planosBox" style="display:none">
-      <h2>Usuários por plano</h2>
-      <div id="planosLista"></div>
+    <!-- Cadastros + Armazenamento -->
+    <div class="row-main" id="rowMain" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>📈 Novos cadastros</h2>
+          <div class="chips">
+            <div class="chip"><span id="cadHoje">0</span><small>hoje</small></div>
+            <div class="chip"><span id="cad7">0</span><small>7 dias</small></div>
+            <div class="chip"><span id="cad30">0</span><small>30 dias</small></div>
+          </div>
+        </div>
+        <div id="graficoCadastros"></div>
+      </div>
+      <div class="panel">
+        <h2>💾 Armazenamento</h2>
+        <div id="storageBox"></div>
+      </div>
+    </div>
+
+    <!-- Assinaturas + Visitas e Leads -->
+    <div class="row2" id="rowAssin" style="display:none">
+      <div class="panel">
+        <h2>💳 Assinaturas</h2>
+        <div id="assinaturasBox"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>🌐 Visitas e Leads</h2>
+          <a class="link-aba" onclick="irParaAba('analytics')">Ver visitas →</a>
+        </div>
+        <div class="mini-grid" id="visitasLeadsBox"></div>
+        <a class="link-aba" style="display:inline-block;margin-top:14px" onclick="irParaAba('crm')">Ver leads / CRM →</a>
+      </div>
+    </div>
+
+    <!-- Últimos cadastros -->
+    <div class="panel leads-table-wrap" id="rowUltimos" style="display:none">
+      <h2>🆕 Últimos cadastros</h2>
+      <div id="ultimosBox"></div>
     </div>
 
     <footer id="atualizadoEm"></footer>
@@ -319,14 +422,14 @@
   <div class="tab-content" id="tab-analytics">
     <header>
       <div>
-        <h1>Analytics</h1>
+        <h1>Visitas do site</h1>
         <p class="subtitle">Visitantes reais do site, rastreados automaticamente</p>
       </div>
       <button class="refresh" onclick="carregarTudo()">↻ Atualizar</button>
     </header>
 
     <!-- Destaque grande: visitantes de hoje é a metrica mais importante -->
-    <div class="card" style="background:linear-gradient(135deg,rgba(124,92,255,0.15),rgba(92,157,255,0.1));border-color:var(--purple);margin-bottom:14px;">
+    <div class="card" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(92,157,255,0.1));border-color:var(--purple);margin-bottom:14px;">
       <div class="label">Visitantes hoje</div>
       <div class="value" style="font-size:48px;" id="visitantesHojeGrande">—</div>
       <div class="delta" id="visitasHojeSub"></div>
@@ -365,6 +468,7 @@
   const LEADS_URL = 'https://cloudx-backend.vercel.app/api/leads';
   const CAMPANHAS_URL = 'https://cloudx-backend.vercel.app/api/campanhas';
   const ANALYTICS_URL = 'https://cloudx-backend.vercel.app/api/analytics/stats';
+  const RESUMO_URL = 'https://cloudx-backend.vercel.app/api/admin/resumo';
 
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -631,70 +735,283 @@
     box.innerHTML = html;
   }
 
+  // ── VISÃO GERAL (dashboard executivo) ──
+  const fmtNum = (n) => Number(n || 0).toLocaleString('pt-BR');
+  const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+  function fmtBytes(b) {
+    b = Number(b || 0);
+    const GB = 1024 ** 3, TB = GB * 1024, MB = 1024 ** 2;
+    if (b >= TB) return (b / TB).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' TB';
+    if (b >= GB) return (b / GB).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' GB';
+    return (b / MB).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' MB';
+  }
+
+  function irParaAba(nome) {
+    const item = document.querySelector(`.nav-item[data-tab="${nome}"]`);
+    if (item) item.click();
+  }
+
+  function deltaTexto(id, texto, classe) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = texto;
+    el.className = 'delta ' + (classe || 'neutro');
+  }
+
+  function desenharGraficoCadastros(serie) {
+    const box = document.getElementById('graficoCadastros');
+    if (!serie || serie.length === 0) { box.innerHTML = '<div class="vazio">Sem dados de cadastros ainda</div>'; return; }
+    const W = 640, H = 220, pe = 44, pd = 12, pt = 14, pb = 28;
+    const maxReal = Math.max(...serie.map(d => d.cadastros));
+    const max = Math.max(4, Math.ceil(maxReal / 4) * 4);
+    const x = (i) => pe + (i * (W - pe - pd)) / (serie.length - 1);
+    const y = (v) => pt + (1 - v / max) * (H - pt - pb);
+
+    let grade = '';
+    for (let g = 0; g <= 4; g++) {
+      const v = (max / 4) * g, yy = y(v);
+      grade += `<line x1="${pe}" x2="${W - pd}" y1="${yy}" y2="${yy}" stroke="var(--border)" stroke-width="1"/>
+                <text x="${pe - 8}" y="${yy + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${Math.round(v)}</text>`;
+    }
+    const pontos = serie.map((d, i) => `${x(i)},${y(d.cadastros)}`);
+    const linha = 'M' + pontos.join(' L');
+    const area = `${linha} L${x(serie.length - 1)},${y(0)} L${x(0)},${y(0)} Z`;
+
+    let rotulos = '', hover = '';
+    serie.forEach((d, i) => {
+      const dt = new Date(d.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      if (i % 5 === 0 || i === serie.length - 1) {
+        rotulos += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--muted)">${dt}</text>`;
+      }
+      hover += `<circle cx="${x(i)}" cy="${y(d.cadastros)}" r="7" fill="transparent"><title>${dt}: ${d.cadastros} cadastro(s)</title></circle>`;
+    });
+    const ultimo = serie[serie.length - 1];
+    box.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:260px;">
+        <defs>
+          <linearGradient id="gradCad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" style="stop-color:var(--purple);stop-opacity:0.45"/>
+            <stop offset="100%" style="stop-color:var(--purple);stop-opacity:0"/>
+          </linearGradient>
+        </defs>
+        ${grade}
+        <path d="${area}" fill="url(#gradCad)"/>
+        <path d="${linha}" fill="none" stroke="var(--purple-light)" stroke-width="2.5" stroke-linejoin="round"/>
+        <circle cx="${x(serie.length - 1)}" cy="${y(ultimo.cadastros)}" r="4" fill="var(--purple-light)"/>
+        ${rotulos}
+        ${hover}
+      </svg>`;
+  }
+
+  function desenharArmazenamento(a) {
+    const box = document.getElementById('storageBox');
+    const pct = Math.min(100, a.percentual || 0);
+    const cor = pct >= 90 ? 'var(--red)' : pct >= 80 ? 'var(--yellow)' : 'var(--green)';
+    const r = 52, c = 2 * Math.PI * r, tam = (pct / 100) * c;
+    const rotuloCap = a.capacidadeFonte === 'infraestrutura' ? 'Capacidade total (infraestrutura)' : 'Capacidade total (soma das cotas)';
+    const aviso = pct >= 90 ? '<div style="color:var(--red);font-size:12px;font-weight:600">⚠ Crítico — ação necessária</div>'
+                : pct >= 80 ? '<div style="color:var(--yellow);font-size:12px;font-weight:600">⚠ Atenção — perto do limite</div>' : '';
+    box.innerHTML = `
+      <div class="storage-wrap">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="${r}" fill="none" stroke="var(--bg)" stroke-width="14"/>
+          <circle cx="70" cy="70" r="${r}" fill="none" stroke="${cor}" stroke-width="14" stroke-linecap="round"
+            stroke-dasharray="${tam} ${c - tam}" transform="rotate(-90 70 70)"/>
+          <text x="70" y="76" text-anchor="middle" font-size="24" font-weight="700" fill="var(--text)">${(a.percentual || 0).toLocaleString('pt-BR')}%</text>
+        </svg>
+        ${aviso}
+        <div style="width:100%">
+          <div class="stat-row"><span>Usado</span><span>${fmtBytes(a.usadoBytes)}</span></div>
+          <div class="stat-row"><span>${rotuloCap}</span><span>${fmtBytes(a.capacidadeBytes)}</span></div>
+          <div class="stat-row"><span>Disponível</span><span>${fmtBytes(Math.max(0, a.capacidadeBytes - a.usadoBytes))}</span></div>
+          <div class="stat-row"><span>Arquivos armazenados</span><span>${a.totalArquivos === null || a.totalArquivos === undefined ? '— <small style="color:var(--muted)">(rodar o SQL)</small>' : fmtNum(a.totalArquivos)}</span></div>
+        </div>
+      </div>`;
+  }
+
+  function desenharAssinaturas(ass, receita) {
+    const box = document.getElementById('assinaturasBox');
+    const total = ass.gratuitas + ass.pagas + ass.vencidas;
+    if (total === 0) { box.innerHTML = '<div class="vazio">Nenhum usuário cadastrado ainda</div>'; return; }
+    const fatias = [
+      { nome: 'Gratuitas', qtd: ass.gratuitas, cor: '#5c9dff' },
+      { nome: 'Pagas', qtd: ass.pagas, cor: '#3ddc84' },
+      { nome: 'Vencidas', qtd: ass.vencidas, cor: '#ff5c6c' },
+    ];
+    const r = 46, c = 2 * Math.PI * r;
+    let off = 0, arcos = '';
+    fatias.forEach(f => {
+      if (!f.qtd) return;
+      const t = (f.qtd / total) * c;
+      arcos += `<circle cx="60" cy="60" r="${r}" fill="none" stroke="${f.cor}" stroke-width="18"
+        stroke-dasharray="${t} ${c - t}" stroke-dashoffset="${-off}" transform="rotate(-90 60 60)"/>`;
+      off += t;
+    });
+    const legenda = fatias.map(f =>
+      `<div class="legenda-item"><i style="background:${f.cor}"></i><span>${f.nome}: <b>${fmtNum(f.qtd)}</b> (${Math.round((f.qtd / total) * 100)}%)</span></div>`
+    ).join('');
+
+    const linhas = Object.entries(ass.porPlano)
+      .sort((a, b) => b[1] - a[1])
+      .map(([plano, qtd]) => {
+        const mrrPlano = ass.mrrPorPlano[plano];
+        return `<div class="stat-row"><span>${esc(NOMES_PLANO[plano] || plano)}</span><span>${fmtNum(qtd)}${mrrPlano ? ` · <span style="color:var(--green)">${fmtBRL(mrrPlano)}/mês</span>` : ''}</span></div>`;
+      }).join('');
+
+    box.innerHTML = `
+      <div class="assin-top">
+        <svg width="120" height="120" viewBox="0 0 120 120">${arcos}</svg>
+        <div>${legenda}</div>
+      </div>
+      ${linhas}`;
+  }
+
+  function desenharVisitasLeads(analytics, leadsStats) {
+    const box = document.getElementById('visitasLeadsBox');
+    const a = analytics && analytics.ok ? analytics : null;
+    const l = leadsStats || { total: 0, porStatus: {}, taxaConversao: 0 };
+    const mini = (rot, val) => `<div class="mini"><div class="label">${rot}</div><div class="value">${val}</div></div>`;
+    box.innerHTML = [
+      mini('Visitantes hoje', a ? fmtNum(a.visitantesUnicosHoje) : '—'),
+      mini('🟢 Online agora', a ? fmtNum(a.onlineAgora) : '—'),
+      mini('Visualizações hoje', a ? fmtNum(a.visitasHoje) : '—'),
+      mini('Total de leads', fmtNum(l.total)),
+      mini('Leads convertidos', fmtNum((l.porStatus || {}).convertido || 0)),
+      mini('Conversão de leads', (l.taxaConversao || 0) + '%'),
+    ].join('');
+  }
+
+  function renderizarUltimos(lista) {
+    const box = document.getElementById('ultimosBox');
+    if (!lista || lista.length === 0) { box.innerHTML = '<div class="vazio">Nenhum cadastro ainda</div>'; return; }
+    const linhas = lista.map(u => `
+      <tr>
+        <td>${esc(u.email)}</td>
+        <td>${esc(NOMES_PLANO[u.plano] || u.plano)}</td>
+        <td class="lead-data">${formatarData(u.criadoEm)}</td>
+        <td class="lead-data">${u.ultimoAcesso ? formatarData(u.ultimoAcesso) : 'Nunca'}</td>
+        <td><span class="badge ${u.ativo ? 'ativo' : 'inativo'}">${u.ativo ? 'Ativo' : 'Inativo'}</span></td>
+      </tr>`).join('');
+    box.innerHTML = `<table class="leads-table"><thead><tr>
+      <th>Usuário</th><th>Plano</th><th>Cadastro</th><th>Último acesso</th><th>Situação</th>
+    </tr></thead><tbody>${linhas}</tbody></table>`;
+  }
+
+  function renderizarResumo(r) {
+    const u = r.usuarios, c = r.cadastros, ass = r.assinaturas;
+
+    // Saúde geral + alertas
+    const pill = document.getElementById('saudePill');
+    const textos = { ok: '● Operando normalmente', atencao: '● Atenção necessária', critico: '● Situação crítica' };
+    pill.className = 'saude-pill ' + r.saude.status;
+    pill.textContent = textos[r.saude.status] || textos.ok;
+    document.getElementById('alertasBox').innerHTML = r.saude.alertas
+      .map(a => `<div class="alerta ${a.nivel}">⚠ ${esc(a.texto)}</div>`).join('');
+
+    // Cartões principais
+    setTxt('kpiTotal', fmtNum(u.total));
+    deltaTexto('kpiTotalSub', `+${fmtNum(c.ultimos30dias)} nos últimos 30 dias`, c.ultimos30dias > 0 ? '' : 'neutro');
+    setTxt('kpiAtivos', fmtNum(u.ativos));
+    setTxt('kpiInativos', fmtNum(u.inativos));
+    deltaTexto('kpiInativosSub', u.total ? Math.round((u.inativos / u.total) * 100) + '% da base' : '', 'neutro');
+    setTxt('kpiMrr', fmtBRL(r.receita.mrr));
+    deltaTexto('kpiMrrSub', `${fmtNum(ass.pagas)} pagas · ${fmtNum(ass.gratuitas)} gratuitas`, 'neutro');
+    setTxt('kpiChurn', r.churn.taxa.toLocaleString('pt-BR') + '%');
+    deltaTexto('kpiChurnSub', `${fmtNum(r.churn.cancelados30dias)} vencida(s) em 30 dias`,
+      r.churn.taxa >= 10 ? 'negativo' : 'neutro');
+    document.getElementById('kpiChurn').style.color = r.churn.taxa >= 20 ? 'var(--red)' : r.churn.taxa >= 10 ? 'var(--yellow)' : '';
+
+    const cr = r.crescimento;
+    setTxt('kpiCresc', (cr.usuarios30dPercentual >= 0 ? '+' : '') + cr.usuarios30dPercentual.toLocaleString('pt-BR') + '%');
+    if (cr.variacaoCadastros === null) deltaTexto('kpiCrescSub', 'sem período anterior para comparar', 'neutro');
+    else deltaTexto('kpiCrescSub', `${cr.variacaoCadastros >= 0 ? '▲' : '▼'} ${Math.abs(cr.variacaoCadastros)}% cadastros vs. 30 dias antes`, cr.variacaoCadastros >= 0 ? '' : 'negativo');
+
+    // Cadastros
+    setTxt('cadHoje', fmtNum(c.hoje));
+    setTxt('cad7', fmtNum(c.ultimos7dias));
+    setTxt('cad30', fmtNum(c.ultimos30dias));
+    desenharGraficoCadastros(c.porDia);
+
+    desenharArmazenamento(r.armazenamento);
+    desenharAssinaturas(ass, r.receita);
+    renderizarUltimos(r.ultimosCadastros);
+
+    ['cards', 'rowMain', 'rowAssin', 'rowUltimos'].forEach(id => {
+      document.getElementById(id).style.display = id === 'cards' ? 'grid' : (id === 'rowUltimos' ? 'block' : 'grid');
+    });
+  }
+
+  async function buscarJson(url) {
+    try {
+      const resp = await fetch(url);
+      return await resp.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function carregarTudo() {
     const status = document.getElementById('status');
     const erroBox = document.getElementById('erroBox');
     status.textContent = 'Carregando dados reais...';
     erroBox.innerHTML = '';
 
-    try {
-      const [resStats, resLeads, resCampanhas, resAnalytics] = await Promise.all([
-        fetch(STATS_URL),
-        fetch(LEADS_URL),
-        fetch(CAMPANHAS_URL),
-        fetch(ANALYTICS_URL),
-      ]);
-      const dados = await resStats.json();
-      const leads = await resLeads.json();
-      const campanhas = await resCampanhas.json();
-      const analytics = await resAnalytics.json();
+    // Cada fonte carrega separado: se uma falhar, as outras continuam aparecendo
+    const [resumo, dados, leads, campanhas, analytics] = await Promise.all([
+      buscarJson(RESUMO_URL),
+      buscarJson(STATS_URL),
+      buscarJson(LEADS_URL),
+      buscarJson(CAMPANHAS_URL),
+      buscarJson(ANALYTICS_URL),
+    ]);
 
-      if (!dados.ok) throw new Error(dados.erro || 'Erro desconhecido');
+    const falhas = [];
 
-      document.getElementById('totalUsuarios').textContent = dados.totalUsuarios;
-      document.getElementById('storageTotal').textContent = dados.storageTotalUsadoGB + ' GB';
-      document.getElementById('receitaMensal').textContent = 'R$ ' + dados.receitaMensalEstimada;
-
-      const planosLista = document.getElementById('planosLista');
-      planosLista.innerHTML = '';
-      Object.entries(dados.porPlano).forEach(([plano, qtd]) => {
-        const row = document.createElement('div');
-        row.className = 'stat-row';
-        row.innerHTML = `<span>${NOMES_PLANO[plano] || plano}</span><span>${qtd}</span>`;
-        planosLista.appendChild(row);
-      });
-
-      document.getElementById('cards').style.display = 'grid';
-      document.getElementById('planosBox').style.display = 'block';
+    // Visão geral
+    if (resumo && resumo.ok) {
+      renderizarResumo(resumo);
+      document.getElementById('atualizadoEm').textContent = 'Última atualização: ' + new Date(resumo.geradoEm).toLocaleString('pt-BR');
       status.textContent = 'Dados atualizados';
-      document.getElementById('atualizadoEm').textContent = 'Última atualização: ' + new Date(dados.atualizadoEm).toLocaleString('pt-BR');
-
-      const leadsStats = dados.leads || { total: 0, porStatus: {}, porOrigem: {}, scoreMedio: 0, taxaConversao: 0 };
-      document.getElementById('totalLeads').textContent = leadsStats.total;
-      document.getElementById('leadsConvertidos').textContent = leadsStats.porStatus.convertido || 0;
-      document.getElementById('taxaConversao').textContent = 'Taxa: ' + leadsStats.taxaConversao + '%';
-      document.getElementById('scoreMedio').textContent = leadsStats.scoreMedio;
-      document.getElementById('crmCards').style.display = 'grid';
-
-      desenharDonut(leadsStats.porStatus, leadsStats.total);
-      preencherOrigem(leadsStats.porOrigem, leadsStats.total);
-      renderizarTabelaLeads(Array.isArray(leads) ? leads : []);
-      renderizarTabelaCampanhas(Array.isArray(campanhas) ? campanhas : []);
-
-      if (analytics.ok) {
-        document.getElementById('visitantesHojeGrande').textContent = analytics.visitantesUnicosHoje;
-        document.getElementById('visitasHojeSub').textContent = analytics.visitasHoje + ' visualizações de página hoje';
-        document.getElementById('onlineAgora').textContent = analytics.onlineAgora;
-        document.getElementById('visitasHoje').textContent = analytics.visitasHoje;
-        document.getElementById('visitasTotal').textContent = analytics.visitasTotal;
-        document.getElementById('analyticsCards').style.display = 'grid';
-        desenharGraficoVisitas(analytics.visitasPorDia);
-        preencherPaginas(analytics.paginasMaisAcessadas);
-      }
-
-    } catch (e) {
-      erroBox.innerHTML = `<div class="erro">❌ Erro ao carregar dados: ${e.message}</div>`;
+    } else {
+      falhas.push('indicadores gerais' + (resumo && resumo.erro ? ` (${resumo.erro})` : ''));
       status.textContent = 'Falha ao carregar';
+    }
+
+    // Leads / CRM (mantido)
+    const leadsStats = (dados && dados.ok && dados.leads) ? dados.leads : { total: 0, porStatus: {}, porOrigem: {}, scoreMedio: 0, taxaConversao: 0 };
+    if (!(dados && dados.ok)) falhas.push('leads');
+    document.getElementById('totalLeads').textContent = leadsStats.total;
+    document.getElementById('leadsConvertidos').textContent = leadsStats.porStatus.convertido || 0;
+    document.getElementById('taxaConversao').textContent = 'Taxa: ' + leadsStats.taxaConversao + '%';
+    document.getElementById('scoreMedio').textContent = leadsStats.scoreMedio;
+    document.getElementById('crmCards').style.display = 'grid';
+    desenharDonut(leadsStats.porStatus, leadsStats.total);
+    preencherOrigem(leadsStats.porOrigem, leadsStats.total);
+    renderizarTabelaLeads(Array.isArray(leads) ? leads : []);
+    renderizarTabelaCampanhas(Array.isArray(campanhas) ? campanhas : []);
+
+    // Visitas / Analytics (mantido)
+    if (analytics && analytics.ok) {
+      document.getElementById('visitantesHojeGrande').textContent = analytics.visitantesUnicosHoje;
+      document.getElementById('visitasHojeSub').textContent = analytics.visitasHoje + ' visualizações de página hoje';
+      document.getElementById('onlineAgora').textContent = analytics.onlineAgora;
+      document.getElementById('visitasHoje').textContent = analytics.visitasHoje;
+      document.getElementById('visitasTotal').textContent = analytics.visitasTotal;
+      document.getElementById('analyticsCards').style.display = 'grid';
+      desenharGraficoVisitas(analytics.visitasPorDia);
+      preencherPaginas(analytics.paginasMaisAcessadas);
+    } else {
+      falhas.push('visitas');
+    }
+
+    // Cartão "Visitas e Leads" da visão geral
+    if (document.getElementById('visitasLeadsBox')) desenharVisitasLeads(analytics, leadsStats);
+
+    if (falhas.length) {
+      erroBox.innerHTML = `<div class="erro">❌ Não foi possível carregar: ${esc(falhas.join(', '))}. Confira se o backend está no ar e tente atualizar.</div>`;
     }
   }
 
