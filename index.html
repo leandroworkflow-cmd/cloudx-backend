@@ -1126,6 +1126,16 @@ const API = 'https://cloudx-backend.vercel.app';
 
 // ── ANALYTICS TRACKING ──
 (function(){
+  // ?nocount=1 -> este navegador deixa de ser contado (abra o site assim UMA vez no seu aparelho)
+  // ?nocount=0 -> volta a contar
+  try {
+    var q = new URLSearchParams(location.search).get('nocount');
+    if (q === '1') localStorage.setItem('_cx_ignorar', '1');
+    if (q === '0') localStorage.removeItem('_cx_ignorar');
+    if (localStorage.getItem('_cx_ignorar') === '1') return;
+  } catch (e) {}
+  if (navigator.webdriver) return;   // navegador automatizado = robô
+
   // gera ou recupera visitor_id persistente
   let vid = localStorage.getItem('_cx_vid');
   if(!vid){ vid = 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2); localStorage.setItem('_cx_vid', vid); }
@@ -1134,7 +1144,7 @@ const API = 'https://cloudx-backend.vercel.app';
     fetch(API+'/api/analytics/pageview', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ visitor_id: vid, pagina: location.pathname || '/', referrer: document.referrer || '' })
+      body: JSON.stringify({ visitor_id: vid, pagina: location.pathname || '/', referrer: document.referrer || '', humano: true })
     }).catch(()=>{});
   }
 
@@ -1142,14 +1152,29 @@ const API = 'https://cloudx-backend.vercel.app';
     fetch(API+'/api/analytics/heartbeat', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ visitor_id: vid, pagina: location.pathname || '/' })
+      body: JSON.stringify({ visitor_id: vid, pagina: location.pathname || '/', humano: true })
     }).catch(()=>{});
   }
 
-  // dispara pageview assim que carregar
-  track();
-  // heartbeat a cada 2 minutos para manter "online agora" preciso
-  setInterval(heartbeat, 120000);
+  // ── SÓ CONTA VISITA HUMANA ──
+  // A visita só é registrada quando, ao mesmo tempo: (1) a aba está visível, (2) já passaram 3 segundos
+  // e (3) a pessoa fez uma interação real (toque, clique, tecla, rolagem ou mouse).
+  // Robôs, capturas de tela, prévias de link e monitores só carregam a página e não interagem.
+  var contou = false, interagiu = false, passou3s = false;
+  function tentar(){
+    if (contou || !interagiu || !passou3s || document.visibilityState !== 'visible') return;
+    contou = true;
+    track();
+    setInterval(heartbeat, 120000);   // mantém o "online agora"
+  }
+  ['pointerdown','touchstart','keydown','scroll','wheel','mousemove'].forEach(function(ev){
+    window.addEventListener(ev, function(e){
+      if (e.isTrusted === false) return;   // evento falso criado por script
+      interagiu = true; tentar();
+    }, { passive: true });
+  });
+  setTimeout(function(){ passou3s = true; tentar(); }, 3000);
+  document.addEventListener('visibilitychange', tentar);
 })();
 
 const { createClient } = supabase;

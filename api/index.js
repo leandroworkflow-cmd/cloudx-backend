@@ -698,22 +698,37 @@ app.post('/api/chatbot/lead', async (req, res) => {
 // ANALYTICS DE VISITANTES
 // ============================================
 
+// ── Filtros para só contar visita HUMANA ──
+// Robôs (Google, monitores de uptime, prévia de link, scripts) não entram na contagem
+const REGEX_BOT = /bot|crawl|spider|slurp|headless|lighthouse|pagespeed|gtmetrix|pingdom|uptime|monitor|facebookexternalhit|whatsapp|telegram|preview|curl|wget|python-requests|axios|node-fetch|undici|^node$|go-http|java\//i;
+const VISITOR_ID_OK = /^v_\d{10,15}_[a-z0-9]{1,30}$/;   // formato gerado pelo site
+const pareceBot = (req) => { const ua = String(req.headers['user-agent'] || ''); return !ua || REGEX_BOT.test(ua); };
+const OFFSET_BR = 3 * 60 * 60 * 1000;                     // Brasília = UTC-3
+// Visita válida = não é robô + id no formato do site + o site confirmou interação humana (humano: true)
+const visitaInvalida = (req, vid) => pareceBot(req) || !req.body || req.body.humano !== true || !VISITOR_ID_OK.test(String(vid));
+
 // Registra uma visualizacao de pagina + marca o visitante como online
 app.post('/api/analytics/pageview', async (req, res) => {
-  const { visitor_id, pagina, referrer } = req.body;
+  const { visitor_id, pagina, referrer } = req.body || {};
   if (!visitor_id || !pagina) return res.status(400).json({ erro: 'visitor_id e pagina obrigatorios' });
+  if (visitaInvalida(req, visitor_id)) return res.json({ ok: true, ignorado: true });
   const db = getDB();
+  const linha = { visitor_id, pagina: String(pagina).slice(0, 200), referrer: referrer ? String(referrer).slice(0, 300) : null };
 
-  await db.from('page_views').insert({ visitor_id, pagina, referrer: referrer || null });
-  await db.from('visitantes_online').upsert({ visitor_id, pagina, updated_at: new Date().toISOString() });
+  // Guarda o navegador para auditoria (se a coluna user_agent existir); senão grava sem ela
+  const ua = String(req.headers['user-agent'] || '').slice(0, 300);
+  let { error } = await db.from('page_views').insert({ ...linha, user_agent: ua });
+  if (error) await db.from('page_views').insert(linha);
+  await db.from('visitantes_online').upsert({ visitor_id, pagina: linha.pagina, updated_at: new Date().toISOString() });
 
   res.json({ ok: true });
 });
 
 // Heartbeat: o site chama isso a cada ~20s enquanto a aba estiver aberta, pra manter o "online" atualizado
 app.post('/api/analytics/heartbeat', async (req, res) => {
-  const { visitor_id, pagina } = req.body;
+  const { visitor_id, pagina } = req.body || {};
   if (!visitor_id) return res.status(400).json({ erro: 'visitor_id obrigatorio' });
+  if (visitaInvalida(req, visitor_id)) return res.json({ ok: true, ignorado: true });
   const db = getDB();
 
   await db.from('visitantes_online').upsert({ visitor_id, pagina: pagina || null, updated_at: new Date().toISOString() });
@@ -725,7 +740,8 @@ app.get('/api/analytics/stats', async (req, res) => {
   try {
     const db = getDB();
     const agora = new Date();
-    const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).toISOString();
+    const diaBR = new Date(agora.getTime() - OFFSET_BR);
+    const inicioHoje = new Date(Date.UTC(diaBR.getUTCFullYear(), diaBR.getUTCMonth(), diaBR.getUTCDate()) + OFFSET_BR).toISOString();
     const cincoMinAtras = new Date(agora.getTime() - 5 * 60 * 1000).toISOString();
     const trintaDiasAtras = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -756,14 +772,14 @@ app.get('/api/analytics/stats', async (req, res) => {
     const { data: visitasPorDiaData } = await db.from('page_views').select('created_at').gte('created_at', catorzeDiasAtras);
     const contagemPorDia = {};
     (visitasPorDiaData || []).forEach(v => {
-      const dia = v.created_at.slice(0, 10); // YYYY-MM-DD
+      const dia = new Date(Date.parse(v.created_at) - OFFSET_BR).toISOString().slice(0, 10); // AAAA-MM-DD (Brasília)
       contagemPorDia[dia] = (contagemPorDia[dia] || 0) + 1;
     });
     // Preenche os 14 dias mesmo os que tiveram 0 visitas, para o grafico ficar completo
     const visitasPorDia = [];
     for (let i = 13; i >= 0; i--) {
       const d = new Date(agora.getTime() - i * 24 * 60 * 60 * 1000);
-      const chave = d.toISOString().slice(0, 10);
+      const chave = new Date(d.getTime() - OFFSET_BR).toISOString().slice(0, 10);
       visitasPorDia.push({ data: chave, visitas: contagemPorDia[chave] || 0 });
     }
 
