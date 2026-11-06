@@ -326,7 +326,10 @@
 
     <!-- Últimos cadastros -->
     <div class="panel leads-table-wrap" id="rowUltimos" style="display:none">
-      <h2>🆕 Últimos cadastros</h2>
+      <div class="panel-head">
+        <h2>🆕 Últimos cadastros</h2>
+        <a class="link-aba" id="btnEmails" onclick="alternarEmails()">🔓 Mostrar e-mails completos</a>
+      </div>
       <div id="ultimosBox"></div>
     </div>
 
@@ -938,15 +941,34 @@
     desenharArmazenamento(r.armazenamento);
     desenharAssinaturas(ass, r.receita);
     renderizarUltimos(r.ultimosCadastros);
+    const btn = document.getElementById('btnEmails');
+    if (r.emailCompleto) {
+      btn.textContent = '🔒 Ocultar e-mails';
+    } else {
+      btn.textContent = '🔓 Mostrar e-mails completos';
+      if (lerToken()) { salvarToken(''); alert('Token inválido, ou ADMIN_TOKEN ainda não configurada na Vercel. Os e-mails continuam ocultos.'); }
+    }
 
     ['cards', 'rowMain', 'rowAssin', 'rowUltimos'].forEach(id => {
       document.getElementById(id).style.display = id === 'cards' ? 'grid' : (id === 'rowUltimos' ? 'block' : 'grid');
     });
   }
 
-  async function buscarJson(url) {
+  // Token de admin (só serve para liberar os e-mails completos); fica guardado neste navegador
+  function lerToken() { try { return localStorage.getItem('cloudx_admin_token') || ''; } catch (e) { return ''; } }
+  function salvarToken(t) { try { t ? localStorage.setItem('cloudx_admin_token', t) : localStorage.removeItem('cloudx_admin_token'); } catch (e) {} }
+
+  function alternarEmails() {
+    if (lerToken()) { salvarToken(''); carregarTudo(); return; }
+    const t = prompt('Digite o token de admin (variável ADMIN_TOKEN da Vercel) para ver os e-mails completos:');
+    if (!t) return;
+    salvarToken(t.trim());
+    carregarTudo();
+  }
+
+  async function buscarJson(url, headers) {
     try {
-      const resp = await fetch(url);
+      const resp = await fetch(url, headers ? { headers } : undefined);
       return await resp.json();
     } catch (e) {
       return null;
@@ -961,7 +983,7 @@
 
     // Cada fonte carrega separado: se uma falhar, as outras continuam aparecendo
     const [resumo, dados, leads, campanhas, analytics] = await Promise.all([
-      buscarJson(RESUMO_URL),
+      buscarJson(RESUMO_URL, lerToken() ? { 'x-admin-token': lerToken() } : null),
       buscarJson(STATS_URL),
       buscarJson(LEADS_URL),
       buscarJson(CAMPANHAS_URL),
