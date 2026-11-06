@@ -32,12 +32,27 @@ function inicioHojeISO() {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) + OFFSET_BR).toISOString();
 }
 
-const gmailConfigurado = () => !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
+// Limpa o que costuma vir errado ao colar na Vercel: espaços, quebra de linha e aspas
+const limpar = (v) => String(v == null ? '' : v).trim().replace(/^["'`]+|["'`]+$/g, '').trim();
+const gmailUser = () => limpar(process.env.GMAIL_USER).toLowerCase();
+const gmailSenha = () => limpar(process.env.GMAIL_APP_PASSWORD).replace(/\s+/g, '');
+const gmailConfigurado = () => !!(gmailUser() && gmailSenha());
 const criarTransporte = () => nodemailer.createTransport({
   service: 'gmail',
-  auth: { user: process.env.GMAIL_USER, pass: String(process.env.GMAIL_APP_PASSWORD).replace(/\s+/g, '') },
+  auth: { user: gmailUser(), pass: gmailSenha() },
 });
-const remetente = () => `"${String(process.env.EMAIL_REMETENTE_NOME || 'CloudX').replace(/"/g, '')}" <${process.env.GMAIL_USER}>`;
+const remetente = () => `"${String(process.env.EMAIL_REMETENTE_NOME || 'CloudX').replace(/"/g, '')}" <${gmailUser()}>`;
+
+// Mensagem de login recusado com o que ajuda a achar o erro (só o admin vê; a senha nunca é mostrada)
+function descreverErroLogin(e) {
+  const resposta = String((e && (e.response || e.message)) || '').replace(/\s+/g, ' ').slice(0, 180);
+  const user = gmailUser(), senha = gmailSenha();
+  let dica = '';
+  if (senha.length !== 16) dica = ' A senha de app tem sempre 16 letras: a colada tem ' + senha.length + '. Gere outra e cole inteira.';
+  else if (!/@(gmail|googlemail)\.com$/.test(user)) dica = ' O GMAIL_USER não parece um endereço @gmail.com.';
+  else dica = ' Confira se a senha foi gerada NESSA mesma conta e se a verificação em duas etapas continua ligada.';
+  return `O Gmail recusou o login. Usuário usado: ${user} · senha de app com ${senha.length} caracteres.${dica} (Resposta do Google: ${resposta})`;
+}
 
 // ── Link de descadastro (assinado: ninguém consegue descadastrar o e-mail dos outros) ──
 const segredo = () => process.env.UNSUB_SECRET || process.env.ADMIN_TOKEN || '';
@@ -164,7 +179,7 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       const publicos = {};
       PUBLICOS.forEach(p => { publicos[p] = filtrar(base.pessoas, p).length; });
       res.json({
-        ok: true, gmailConfigurado: gmailConfigurado(), remetente: process.env.GMAIL_USER || null,
+        ok: true, gmailConfigurado: gmailConfigurado(), remetente: gmailUser() || null,
         limiteDia: LIMITE_DIA, enviadosHoje: await contarEnviadosHoje(db),
         descadastrados: base.descadastrados, publicos,
       });
@@ -178,10 +193,10 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       const { assunto, corpo } = req.body || {};
       const problema = validarTexto(assunto, corpo);
       if (problema) return res.status(400).json({ ok: false, erro: problema });
-      await enviarUm(criarTransporte(), { email: process.env.GMAIL_USER, nome: 'Teste', assunto: '[TESTE] ' + assunto, corpo });
-      res.json({ ok: true, para: process.env.GMAIL_USER });
+      await enviarUm(criarTransporte(), { email: gmailUser(), nome: 'Teste', assunto: '[TESTE] ' + assunto, corpo });
+      res.json({ ok: true, para: gmailUser() });
     } catch (e) {
-      res.status(erroLogin(e) ? 400 : 500).json({ ok: false, erro: erroLogin(e) ? 'O Gmail recusou o login. Confira GMAIL_USER e a senha de app (GMAIL_APP_PASSWORD).' : 'Falha no envio: ' + e.message });
+      res.status(erroLogin(e) ? 400 : 500).json({ ok: false, erro: erroLogin(e) ? descreverErroLogin(e) : 'Falha no envio: ' + (e.response || e.message) });
     }
   });
 
@@ -277,7 +292,7 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
             await db.from('email_envios').update({ status: 'pendente' }).in('id', lote.slice(i).map(l => l.id));
             if (erroLogin(e)) {
               await db.from('email_campanhas').update({ status: 'pausada' }).eq('id', id);
-              return res.json({ ok: false, erro: 'O Gmail recusou o login. Confira GMAIL_USER e a senha de app (GMAIL_APP_PASSWORD) na Vercel.' });
+              return res.json({ ok: false, erro: descreverErroLogin(e) });
             }
             return resposta({ pausar: true, limiteDia: true, enviadosLote, falhasLote, mensagem: 'O Gmail informou que o limite de envios foi atingido. Continue mais tarde pelo histórico.' });
           }
