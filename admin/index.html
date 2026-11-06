@@ -222,6 +222,22 @@
     .mini-grid { grid-template-columns: repeat(2, 1fr); }
     header { flex-wrap: wrap; gap: 12px; }
   }
+
+  /* ── E-mail marketing ── */
+  .alerta.ok { background: rgba(61,220,132,0.1); border: 1px solid rgba(61,220,132,0.4); color: var(--green); }
+  .email-form { display: grid; gap: 14px; }
+  .form-field textarea {
+    width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); resize: vertical;
+    background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit; line-height: 1.55;
+  }
+  .form-field textarea:focus, .form-field input:focus, .form-field select:focus { outline: none; border-color: var(--purple); }
+  .dica { font-size: 12px; color: var(--muted); line-height: 1.55; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .email-botoes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn-sec { background: transparent; color: var(--text); border: 1px solid var(--border); padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-sec:hover { border-color: var(--purple); }
+  .btn-add-campanha:disabled, .btn-sec:disabled { opacity: 0.45; cursor: not-allowed; }
+  .progresso-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 4px; font-size: 13px; flex-wrap: wrap; }
+  .badge.aviso { background: rgba(255,200,87,0.15); color: var(--yellow); }
 </style>
 </head>
 <body>
@@ -235,6 +251,7 @@
   <div class="nav-item" data-tab="crm">👥 Leads / CRM</div>
   <div class="nav-item" data-tab="campanhas">📣 Campanhas</div>
   <div class="nav-item" data-tab="analytics">📈 Visitas</div>
+    <div class="nav-item" data-tab="email">✉️ E-mail</div>
 </div>
 
 <div class="main">
@@ -461,6 +478,60 @@
     <div class="panel">
       <h2>📄 Páginas mais acessadas (últimos 30 dias)</h2>
       <div id="paginasLista"></div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: E-MAIL MARKETING ===== -->
+  <div class="tab-content" id="tab-email">
+    <header>
+      <div>
+        <h1>E-mail marketing</h1>
+        <p class="subtitle">Envio individual pelo Gmail, com link de descadastro em todo e-mail</p>
+      </div>
+      <button class="refresh" onclick="carregarEmail()">↻ Atualizar</button>
+    </header>
+
+    <div id="emailMsg"></div>
+
+    <div class="panel" id="emailSemToken" style="display:none">
+      <h2>🔒 Área protegida</h2>
+      <p class="subtitle" style="margin-bottom:14px">Para enviar e-mails, informe o token de admin (a variável ADMIN_TOKEN da Vercel).</p>
+      <button class="btn-add-campanha" onclick="pedirTokenEmail()">Informar token</button>
+    </div>
+
+    <div id="emailConteudo" style="display:none">
+      <div class="grid kpis">
+        <div class="card kpi"><div class="label">Gmail</div><div class="value" id="emGmail" style="font-size:22px">—</div><div class="delta neutro" id="emGmailSub"></div></div>
+        <div class="card kpi"><div class="label">Enviados hoje</div><div class="value" id="emHoje">—</div><div class="delta neutro">limite diário de segurança</div></div>
+        <div class="card kpi"><div class="label">Descadastrados</div><div class="value" id="emDesc">—</div><div class="delta neutro">nunca mais recebem</div></div>
+        <div class="card kpi"><div class="label">Usuários alcançáveis</div><div class="value" id="emTotal">—</div><div class="delta neutro">cadastrados com e-mail válido</div></div>
+      </div>
+
+      <div class="panel">
+        <h2>✉️ Nova mensagem</h2>
+        <div class="email-form">
+          <div class="form-field"><label>Quem recebe</label><select id="emailPublico"></select></div>
+          <div class="form-field"><label>Assunto</label><input type="text" id="emailAssunto" maxlength="150" placeholder="Ex: Novidades no CloudX, {{nome}}!"></div>
+          <div class="form-field"><label>Mensagem</label><textarea id="emailCorpo" rows="9" placeholder="Olá {{nome}},&#10;&#10;Escreva aqui a sua mensagem..."></textarea></div>
+          <div class="dica">Use <b>{{nome}}</b> para colocar o primeiro nome da pessoa (sem nome cadastrado, vira "cliente"). Links colados no texto ficam clicáveis. Cada e-mail sai individual, em ritmo lento, sem rastreador, e leva o link para a pessoa se descadastrar.</div>
+          <div class="email-botoes">
+            <button class="btn-sec" id="btnEmailTeste" onclick="emailTeste()">Enviar teste para mim</button>
+            <button class="btn-add-campanha" id="btnEmailEnviar" onclick="emailIniciar()">Enviar para o público</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="emailProgresso" style="display:none">
+        <h2>📤 Enviando</h2>
+        <div class="progresso-topo"><span id="emailProgTxt"></span><button class="btn-sec" id="btnEmailPausar" onclick="emailPausar()">⏸ Pausar</button></div>
+        <div class="barra"><div id="emailProgBarra" style="width:0%;background:var(--green)"></div></div>
+        <div class="dica" id="emailProgAviso" style="display:none;margin-top:12px"></div>
+      </div>
+
+      <div class="panel leads-table-wrap">
+        <h2>🗂️ Histórico de envios</h2>
+        <div id="emailHistorico"></div>
+      </div>
     </div>
   </div>
 
@@ -1036,6 +1107,173 @@
       erroBox.innerHTML = `<div class="erro">❌ Não foi possível carregar: ${esc(falhas.join(', '))}. Confira se o backend está no ar e tente atualizar.</div>`;
     }
   }
+
+  // ── E-MAIL MARKETING ──
+  const EMAIL_API = 'https://cloudx-backend.vercel.app/api/admin/email';
+  const ROTULOS_PUBLICO = {
+    todos: 'Todos os usuários', ativos: 'Ativos (acessaram nos últimos 30 dias)',
+    inativos: 'Inativos (sem acesso há mais de 30 dias)', gratuitos: 'Plano gratuito', pagos: 'Plano pago',
+  };
+  let emailRodando = false, emailParar = false, emailPublicos = {};
+
+  function msgEmail(tipo, texto) {
+    document.getElementById('emailMsg').innerHTML = texto
+      ? `<div class="alerta ${tipo}">${tipo === 'ok' ? '✅' : '⚠'} ${esc(texto)}</div>` : '';
+  }
+
+  async function emailChamar(caminho, corpo) {
+    const resp = await fetch(EMAIL_API + caminho, {
+      method: corpo ? 'POST' : 'GET',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': lerToken() },
+      body: corpo ? JSON.stringify(corpo) : undefined,
+    });
+    let dados = null;
+    try { dados = await resp.json(); } catch (e) {}
+    if (!dados) throw new Error('Resposta inválida do servidor (' + resp.status + ')');
+    dados._http = resp.status;
+    return dados;
+  }
+
+  function pedirTokenEmail() {
+    const t = prompt('Digite o token de admin (variável ADMIN_TOKEN da Vercel):');
+    if (!t) return;
+    salvarToken(t.trim());
+    carregarEmail();
+  }
+
+  function mostrarSemToken(mostrar) {
+    document.getElementById('emailSemToken').style.display = mostrar ? 'block' : 'none';
+    document.getElementById('emailConteudo').style.display = mostrar ? 'none' : 'block';
+  }
+
+  async function carregarEmail(manterMsg) {
+    if (emailRodando) return;
+    if (manterMsg !== true) msgEmail('', '');   // depois de um envio, o aviso de resultado fica na tela
+    if (!lerToken()) { mostrarSemToken(true); return; }
+    try {
+      const s = await emailChamar('/status');
+      if (!s.ok) {
+        if (s._http === 401) { salvarToken(''); mostrarSemToken(true); msgEmail('critico', 'Token inválido. Confira o ADMIN_TOKEN da Vercel (e se o Redeploy já terminou).'); return; }
+        document.getElementById('emailSemToken').style.display = 'none';
+        document.getElementById('emailConteudo').style.display = 'none';
+        msgEmail('critico', s.erro || 'Não foi possível carregar.');
+        return;
+      }
+      mostrarSemToken(false);
+      emailPublicos = s.publicos;
+      setTxt('emGmail', s.gmailConfigurado ? 'Conectado' : 'Não configurado');
+      document.getElementById('emGmail').style.color = s.gmailConfigurado ? 'var(--green)' : 'var(--red)';
+      setTxt('emGmailSub', s.gmailConfigurado ? s.remetente : 'crie GMAIL_USER e GMAIL_APP_PASSWORD na Vercel');
+      setTxt('emHoje', fmtNum(s.enviadosHoje) + ' / ' + fmtNum(s.limiteDia));
+      setTxt('emDesc', fmtNum(s.descadastrados));
+      setTxt('emTotal', fmtNum(s.publicos.todos));
+
+      const sel = document.getElementById('emailPublico'), atual = sel.value;
+      sel.innerHTML = Object.keys(ROTULOS_PUBLICO)
+        .map(k => `<option value="${k}">${ROTULOS_PUBLICO[k]} — ${fmtNum(s.publicos[k])}</option>`).join('');
+      if (atual) sel.value = atual;
+      document.getElementById('btnEmailTeste').disabled = !s.gmailConfigurado;
+      document.getElementById('btnEmailEnviar').disabled = !s.gmailConfigurado;
+      if (!s.gmailConfigurado) msgEmail('atencao', 'Gmail ainda não configurado: crie GMAIL_USER e GMAIL_APP_PASSWORD na Vercel e faça um Redeploy.');
+
+      const h = await emailChamar('/campanhas');
+      renderizarHistoricoEmail(h.ok ? h.campanhas : []);
+    } catch (e) {
+      msgEmail('critico', 'Falha ao carregar: ' + e.message);
+    }
+  }
+
+  function renderizarHistoricoEmail(lista) {
+    const box = document.getElementById('emailHistorico');
+    if (!lista.length) { box.innerHTML = '<div class="vazio">Nenhum envio feito ainda</div>'; return; }
+    const classe = { concluida: 'ativo', cancelada: 'inativo', pausada: 'aviso', enviando: 'aviso' };
+    const nome = { concluida: 'Concluída', cancelada: 'Cancelada', pausada: 'Pausada', enviando: 'Em andamento' };
+    const linhas = lista.map(c => {
+      const aberta = c.status === 'pausada' || c.status === 'enviando';
+      const acoes = aberta
+        ? `<a class="link-aba" onclick="emailContinuar(${c.id}, ${c.total})">▶ Continuar</a> &nbsp; <a class="link-aba" style="color:var(--red)" onclick="emailCancelar(${c.id})">✕ Cancelar</a>` : '';
+      return `<tr>
+        <td class="lead-data">${formatarData(c.criado_em)}</td>
+        <td>${esc(c.assunto)}</td>
+        <td>${esc((ROTULOS_PUBLICO[c.publico] || c.publico).split(' (')[0])}</td>
+        <td>${fmtNum(c.enviados)} / ${fmtNum(c.total)}${c.falhas ? ` <span style="color:var(--red)">· ${fmtNum(c.falhas)} falha(s)</span>` : ''}</td>
+        <td><span class="badge ${classe[c.status] || 'aviso'}">${nome[c.status] || esc(c.status)}</span></td>
+        <td>${acoes}</td></tr>`;
+    }).join('');
+    box.innerHTML = `<table class="leads-table"><thead><tr><th>Data</th><th>Assunto</th><th>Público</th><th>Enviados</th><th>Situação</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`;
+  }
+
+  function lerFormEmail() {
+    return {
+      publico: document.getElementById('emailPublico').value,
+      assunto: document.getElementById('emailAssunto').value,
+      corpo: document.getElementById('emailCorpo').value,
+    };
+  }
+
+  async function emailTeste() {
+    const { assunto, corpo } = lerFormEmail();
+    if (assunto.trim().length < 3 || corpo.trim().length < 10) { msgEmail('atencao', 'Preencha o assunto e a mensagem (mínimo de 10 letras).'); return; }
+    const btn = document.getElementById('btnEmailTeste'); btn.disabled = true; btn.textContent = 'Enviando teste...';
+    try {
+      const r = await emailChamar('/teste', { assunto, corpo });
+      msgEmail(r.ok ? 'ok' : 'critico', r.ok ? `Teste enviado para ${r.para}. Confira a caixa de entrada (e o spam).` : r.erro);
+    } catch (e) { msgEmail('critico', e.message); }
+    btn.disabled = false; btn.textContent = 'Enviar teste para mim';
+  }
+
+  async function emailIniciar() {
+    if (emailRodando) return;
+    const { assunto, corpo, publico } = lerFormEmail();
+    if (assunto.trim().length < 3 || corpo.trim().length < 10) { msgEmail('atencao', 'Preencha o assunto e a mensagem (mínimo de 10 letras).'); return; }
+    const n = emailPublicos[publico] || 0;
+    if (!confirm(`Enviar "${assunto.trim()}" para ${n} pessoa(s)?\n\nSai um e-mail individual por vez, em ritmo lento. Mantenha esta aba aberta até terminar (você pode pausar e continuar depois pelo histórico).\n\nJá enviou o teste para você conferir?`)) return;
+    try {
+      const p = await emailChamar('/preparar', { assunto, corpo, publico });
+      if (!p.ok) { msgEmail('critico', p.erro); return; }
+      const aviso = document.getElementById('emailProgAviso');
+      aviso.style.display = p.aviso ? 'block' : 'none'; aviso.textContent = p.aviso || '';
+      rodarEnvio(p.campanhaId, p.total);
+    } catch (e) { msgEmail('critico', e.message); }
+  }
+
+  function emailContinuar(id, total) { if (!emailRodando) rodarEnvio(id, total); }
+  function emailPausar() { emailParar = true; document.getElementById('btnEmailPausar').textContent = 'Pausando...'; }
+
+  async function emailCancelar(id) {
+    if (!confirm('Cancelar esta campanha? Quem ainda não recebeu não vai receber.')) return;
+    try { const r = await emailChamar('/cancelar', { campanhaId: id }); if (!r.ok) msgEmail('critico', r.erro); } catch (e) { msgEmail('critico', e.message); }
+    carregarEmail(true);
+  }
+
+  async function rodarEnvio(campanhaId, total) {
+    emailRodando = true; emailParar = false; msgEmail('', '');
+    const painel = document.getElementById('emailProgresso'), txt = document.getElementById('emailProgTxt'), barra = document.getElementById('emailProgBarra');
+    document.getElementById('btnEmailPausar').textContent = '⏸ Pausar';
+    document.getElementById('btnEmailEnviar').disabled = true;
+    painel.style.display = 'block'; txt.textContent = 'Começando...'; barra.style.width = '0%';
+    try {
+      while (true) {
+        const r = await emailChamar('/lote', { campanhaId });
+        if (!r.ok) { msgEmail('critico', r.erro || 'Erro no envio.'); break; }
+        const feitos = (r.total || total) - r.restantes;
+        barra.style.width = Math.round((feitos / (r.total || total || 1)) * 100) + '%';
+        txt.textContent = `${fmtNum(r.enviados)} enviados · ${fmtNum(r.falhas)} falhas · ${fmtNum(r.restantes)} na fila`;
+        if (r.concluida) { msgEmail('ok', `Envio concluído: ${fmtNum(r.enviados)} e-mails enviados${r.falhas ? ` e ${fmtNum(r.falhas)} com falha` : ''}.`); break; }
+        if (r.limiteDia) { msgEmail('atencao', r.mensagem || 'Limite de envios atingido. Continue depois pelo histórico.'); break; }
+        if (emailParar) { msgEmail('atencao', 'Envio pausado. Continue quando quiser pelo histórico.'); break; }
+        await new Promise(ok => setTimeout(ok, 4000));   // ritmo lento e discreto
+      }
+    } catch (e) {
+      msgEmail('critico', 'A conexão falhou (' + e.message + '). Nada se perdeu: continue pelo histórico.');
+    }
+    emailRodando = false;
+    document.getElementById('btnEmailEnviar').disabled = false;
+    carregarEmail(true);
+  }
+
+  window.addEventListener('beforeunload', (e) => { if (emailRodando) { e.preventDefault(); e.returnValue = ''; } });
+  document.querySelector('.nav-item[data-tab="email"]').addEventListener('click', () => carregarEmail());
 
   carregarTudo();
 </script>

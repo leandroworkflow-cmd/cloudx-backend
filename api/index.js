@@ -796,3 +796,6 @@ app.get('/api/analytics/stats', async (req, res) => {
     res.status(500).json({ erro: e.message });
   }
 });
+
+// E-mail marketing pelo Gmail (rotas /api/admin/email/* e /api/email/descadastrar)
+require('../email-marketing')(app, { getDB, listarTodosUsuarios, tokenAdminValido });
