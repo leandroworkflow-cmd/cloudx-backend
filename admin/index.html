@@ -514,6 +514,12 @@
           <div class="form-field"><label>Assunto</label><input type="text" id="emailAssunto" maxlength="150" placeholder="Ex: Novidades no CloudX, {{nome}}!"></div>
           <div class="form-field"><label>Mensagem</label><textarea id="emailCorpo" rows="9" placeholder="Olá {{nome}},&#10;&#10;Escreva aqui a sua mensagem..."></textarea></div>
           <div class="dica">Use <b>{{nome}}</b> para colocar o primeiro nome da pessoa (sem nome cadastrado, vira "cliente"). Links colados no texto ficam clicáveis. Cada e-mail sai individual, em ritmo lento, sem rastreador, e leva o link para a pessoa se descadastrar.</div>
+          <div class="form-field">
+            <label>Anexos (opcional)</label>
+            <input type="file" id="emailArquivos" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.docx,.xlsx,.pptx" onchange="emailAdicionarAnexos(this)">
+            <div id="emailAnexosLista" style="margin-top:8px"></div>
+            <div class="dica" style="margin-top:8px">Até 3 arquivos, 3 MB no total (PDF, imagens, Word, Excel, PowerPoint, texto). Cada pessoa recebe uma cópia, e anexos aumentam a chance de cair no spam: prefira um PDF pequeno ou uma imagem, e evite .zip e programas.</div>
+          </div>
           <div class="email-botoes">
             <button class="btn-sec" id="btnEmailTeste" onclick="emailTeste()">Enviar teste para mim</button>
             <button class="btn-add-campanha" id="btnEmailEnviar" onclick="emailIniciar()">Enviar para o público</button>
@@ -1216,7 +1222,7 @@
     if (assunto.trim().length < 3 || corpo.trim().length < 10) { msgEmail('atencao', 'Preencha o assunto e a mensagem (mínimo de 10 letras).'); return; }
     const btn = document.getElementById('btnEmailTeste'); btn.disabled = true; btn.textContent = 'Enviando teste...';
     try {
-      const r = await emailChamar('/teste', { assunto, corpo });
+      const r = await emailChamar('/teste', { assunto, corpo, anexos: anexosParaEnvio() });
       msgEmail(r.ok ? 'ok' : 'critico', r.ok ? `Teste enviado para ${r.para}. Confira a caixa de entrada (e o spam).` : r.erro);
     } catch (e) { msgEmail('critico', e.message); }
     btn.disabled = false; btn.textContent = 'Enviar teste para mim';
@@ -1227,10 +1233,11 @@
     const { assunto, corpo, publico } = lerFormEmail();
     if (assunto.trim().length < 3 || corpo.trim().length < 10) { msgEmail('atencao', 'Preencha o assunto e a mensagem (mínimo de 10 letras).'); return; }
     const n = emailPublicos[publico] || 0;
-    if (!confirm(`Enviar "${assunto.trim()}" para ${n} pessoa(s)?\n\nSai um e-mail individual por vez, em ritmo lento. Mantenha esta aba aberta até terminar (você pode pausar e continuar depois pelo histórico).\n\nJá enviou o teste para você conferir?`)) return;
+    if (!confirm(`Enviar "${assunto.trim()}" para ${n} pessoa(s)${emailAnexos.length ? ' (com ' + emailAnexos.length + ' anexo(s); cada pessoa recebe uma cópia)' : ''}?\n\nSai um e-mail individual por vez, em ritmo lento. Mantenha esta aba aberta até terminar (você pode pausar e continuar depois pelo histórico).\n\nJá enviou o teste para você conferir?`)) return;
     try {
-      const p = await emailChamar('/preparar', { assunto, corpo, publico });
+      const p = await emailChamar('/preparar', { assunto, corpo, publico, anexos: anexosParaEnvio() });
       if (!p.ok) { msgEmail('critico', p.erro); return; }
+      limparAnexos();
       const aviso = document.getElementById('emailProgAviso');
       aviso.style.display = p.aviso ? 'block' : 'none'; aviso.textContent = p.aviso || '';
       rodarEnvio(p.campanhaId, p.total);
@@ -1271,6 +1278,49 @@
     document.getElementById('btnEmailEnviar').disabled = false;
     carregarEmail(true);
   }
+
+  // ── anexos do e-mail ──
+  const EXT_ANEXO = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'txt', 'csv', 'docx', 'xlsx', 'pptx'];
+  const MAX_ANEXOS = 3, MAX_BYTES_ANEXOS = 3 * 1024 * 1024;
+  let emailAnexos = [];   // { nome, tamanho, dados (base64) }
+
+  const fmtTam = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+
+  function renderAnexos() {
+    const box = document.getElementById('emailAnexosLista');
+    if (!box) return;
+    const total = emailAnexos.reduce((s, a) => s + a.tamanho, 0);
+    box.innerHTML = emailAnexos.map((a, i) =>
+      `<div class="stat-row"><span>📎 ${esc(a.nome)}</span><span>${fmtTam(a.tamanho)} · <a class="link-aba" style="color:var(--red)" onclick="emailRemoverAnexo(${i})">remover</a></span></div>`).join('')
+      + (emailAnexos.length ? `<div style="color:var(--muted);font-size:11px;margin-top:6px">Total: ${fmtTam(total)} de 3 MB</div>` : '');
+  }
+  function emailRemoverAnexo(i) { emailAnexos.splice(i, 1); renderAnexos(); }
+  function limparAnexos() { emailAnexos = []; const inp = document.getElementById('emailArquivos'); if (inp) inp.value = ''; renderAnexos(); }
+
+  function lerArquivo(arquivo) {
+    return new Promise((ok, falha) => {
+      const r = new FileReader();
+      r.onload = () => ok(String(r.result).split(',')[1] || '');
+      r.onerror = () => falha(new Error('Não consegui ler ' + arquivo.name));
+      r.readAsDataURL(arquivo);
+    });
+  }
+
+  async function emailAdicionarAnexos(input) {
+    const novos = Array.from(input.files || []);
+    input.value = '';
+    for (const f of novos) {
+      const ext = f.name.includes('.') ? f.name.split('.').pop().toLowerCase() : '';
+      const total = emailAnexos.reduce((s, a) => s + a.tamanho, 0);
+      if (emailAnexos.length >= MAX_ANEXOS) { msgEmail('atencao', `No máximo ${MAX_ANEXOS} anexos por e-mail.`); break; }
+      if (!EXT_ANEXO.includes(ext)) { msgEmail('atencao', `"${f.name}" não é aceito. Use: ${EXT_ANEXO.join(', ')}.`); continue; }
+      if (total + f.size > MAX_BYTES_ANEXOS) { msgEmail('atencao', `"${f.name}" ultrapassa o limite de 3 MB no total.`); continue; }
+      try { emailAnexos.push({ nome: f.name, tamanho: f.size, dados: await lerArquivo(f) }); msgEmail('', ''); }
+      catch (e) { msgEmail('critico', e.message); }
+    }
+    renderAnexos();
+  }
+  const anexosParaEnvio = () => emailAnexos.map(a => ({ nome: a.nome, dados: a.dados }));
 
   window.addEventListener('beforeunload', (e) => { if (emailRodando) { e.preventDefault(); e.returnValue = ''; } });
   document.querySelector('.nav-item[data-tab="email"]').addEventListener('click', () => carregarEmail());

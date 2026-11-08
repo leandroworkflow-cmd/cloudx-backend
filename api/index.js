@@ -6,7 +6,10 @@ const mp      = require('../mercadopago');
 const app = express();
 
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+// Corpo maior só nas rotas de e-mail que recebem anexo (a Vercel aceita no máximo 4,5 MB por requisição)
+const jsonPadrao = express.json();
+const jsonGrande = express.json({ limit: '5mb' });
+app.use((req, res, next) => (req.path === '/api/admin/email/preparar' || req.path === '/api/admin/email/teste' ? jsonGrande : jsonPadrao)(req, res, next));
 
 const getDB = () => createClient(
   process.env.SUPABASE_URL,
