@@ -169,14 +169,23 @@ nav{background:rgba(11,7,32,0.85);backdrop-filter:blur(14px);border-bottom:1px s
 }
 
 /* ── BLACK FRIDAY: card único centralizado ── */
-.plans-single{max-width:360px;margin:44px auto 0;text-align:center;}
+.plans-single{max-width:460px;margin:34px auto 0;text-align:center;}
 .bf-banner{padding:12px 10px 14px;border-radius:14px;margin-bottom:18px;
   background:linear-gradient(135deg,#F59E0B,#EF4444);color:#fff;box-shadow:0 10px 28px rgba(239,68,68,0.35);}
 .bf-banner[hidden]{display:none;}
 .bf-title{font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:3px;line-height:1.1;margin-bottom:8px;}
-.plans-single .plan-card{padding:34px 24px 28px;}
-.plans-single .plan-storage{font-size:18px;font-weight:700;color:#fff;}
-@media(max-width:480px){.plans-single{margin-top:28px;padding:0 4px;}}
+.plans-single .plan-card{padding:40px 32px 32px;text-align:center;border-width:2px;box-shadow:0 18px 60px rgba(108,76,241,0.35);}
+.plans-single .plan-name{font-size:14px;margin-bottom:2px;}
+.bf-gb{font-size:clamp(84px,22vw,128px);font-weight:900;line-height:1;letter-spacing:-4px;margin:6px 0 4px;
+  background:linear-gradient(135deg,#fff 30%,#caa8ff);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 6px 28px rgba(139,92,246,0.55));}
+.bf-gb-sub{font-size:20px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:2px;margin-bottom:14px;}
+.plans-single .plan-price{font-size:18px;font-weight:700;margin-bottom:22px;letter-spacing:0;}
+.plans-single .plan-features{align-items:center;margin-bottom:28px;}
+.plans-single .plan-features li{font-size:14px;}
+.plans-single .btn-plan{background:var(--primary);border-color:var(--primary);padding:16px;font-size:17px;border-radius:11px;}
+.plans-single .btn-plan:hover{background:var(--primary);box-shadow:0 6px 24px rgba(139,92,246,0.55);}
+@media(max-width:480px){.plans-single{margin-top:24px;padding:0 4px;}.plans-single .plan-card{padding:36px 20px 28px;}}
 
 .plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#F59E0B;color:#1a0f3e;font-size:11px;font-weight:700;padding:4px 16px;border-radius:50px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;}
 .plan-badge.free-badge{background:#34D399;}
@@ -557,7 +566,6 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
 <div class="plans-section" id="planos">
   <div class="plans-inner">
     <div class="section-label">Planos simples e transparentes</div>
-    <div class="section-title">Escolha o plano ideal<br>para você.</div>
     <div class="section-sub" style="margin:0 auto;">Todos os planos incluem segurança 100% e acesso em qualquer dispositivo.</div>
     <div class="plans-single" id="plans-grid">
       <div class="bf-banner" id="promo-timer" hidden>
@@ -574,8 +582,9 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
       <div class="plan-card free">
         <div class="plan-badge free-badge">OFERTA LIMITADA</div>
         <div class="plan-name">Free</div>
+        <div class="bf-gb"><span data-gb>15 GB</span></div>
+        <div class="bf-gb-sub">grátis por 6 meses</div>
         <div class="plan-price">R$ 0<span>/6 meses</span></div>
-        <div class="plan-storage"><span data-gb>15 GB</span> grátis por 6 meses</div>
         <ul class="plan-features">
           <li>Upload de arquivos</li>
           <li>Criação de pastas</li>
