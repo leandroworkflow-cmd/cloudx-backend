@@ -168,6 +168,16 @@ nav{background:rgba(11,7,32,0.85);backdrop-filter:blur(14px);border-bottom:1px s
   .plans-grid.com-timer{padding-top:140px;margin-top:0;}
 }
 
+/* ── BLACK FRIDAY: card único centralizado ── */
+.plans-single{max-width:360px;margin:44px auto 0;text-align:center;}
+.bf-banner{padding:12px 10px 14px;border-radius:14px;margin-bottom:18px;
+  background:linear-gradient(135deg,#F59E0B,#EF4444);color:#fff;box-shadow:0 10px 28px rgba(239,68,68,0.35);}
+.bf-banner[hidden]{display:none;}
+.bf-title{font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:3px;line-height:1.1;margin-bottom:8px;}
+.plans-single .plan-card{padding:34px 24px 28px;}
+.plans-single .plan-storage{font-size:18px;font-weight:700;color:#fff;}
+@media(max-width:480px){.plans-single{margin-top:28px;padding:0 4px;}}
+
 .plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#F59E0B;color:#1a0f3e;font-size:11px;font-weight:700;padding:4px 16px;border-radius:50px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;}
 .plan-badge.free-badge{background:#34D399;}
 .plan-name{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px;}
@@ -491,7 +501,7 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
     <div class="hero-btns">
       <button class="btn btn-primary btn-lg" onclick="document.getElementById('planos').scrollIntoView({behavior:'smooth'})">Comece agora por apenas R$4,99/mês →</button>
     </div>
-    <div class="hero-promo-note">🎁 <span data-gb>20 GB</span> grátis por 6 meses para experimentar</div>
+    <div class="hero-promo-note">🎁 <span data-gb>15 GB</span> grátis por 6 meses para experimentar</div>
   </div>
 
   <div class="hero-art">
@@ -549,6 +559,32 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
     <div class="section-label">Planos simples e transparentes</div>
     <div class="section-title">Escolha o plano ideal<br>para você.</div>
     <div class="section-sub" style="margin:0 auto;">Todos os planos incluem segurança 100% e acesso em qualquer dispositivo.</div>
+    <div class="plans-single" id="plans-grid">
+      <div class="bf-banner" id="promo-timer" hidden>
+        <div class="bf-title">🖤 Black Friday</div>
+        <div class="promo-timer-label">⏳ Oferta termina em</div>
+        <div class="promo-timer-digits">
+          <div class="promo-timer-unit"><b id="pt-h">72</b><small>horas</small></div>
+          <div class="promo-timer-sep">:</div>
+          <div class="promo-timer-unit"><b id="pt-m">00</b><small>min</small></div>
+          <div class="promo-timer-sep">:</div>
+          <div class="promo-timer-unit"><b id="pt-s">00</b><small>seg</small></div>
+        </div>
+      </div>
+      <div class="plan-card free">
+        <div class="plan-badge free-badge">OFERTA LIMITADA</div>
+        <div class="plan-name">Free</div>
+        <div class="plan-price">R$ 0<span>/6 meses</span></div>
+        <div class="plan-storage"><span data-gb>15 GB</span> grátis por 6 meses</div>
+        <ul class="plan-features">
+          <li>Upload de arquivos</li>
+          <li>Criação de pastas</li>
+          <li>Acesso web</li>
+        </ul>
+        <button class="btn-plan" onclick="abrirAuth('cadastro')">Começar grátis</button>
+      </div>
+    </div>
+    <!-- PLANOS PAGOS (ocultos na Black Friday) — para restaurar, cole de volta dentro do grid:
     <div class="plans-grid com-timer" id="plans-grid">
       <div class="plan-card free">
         <div class="promo-timer" id="promo-timer" hidden>
@@ -564,7 +600,7 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
         <div class="plan-badge free-badge">OFERTA LIMITADA</div>
         <div class="plan-name">Free</div>
         <div class="plan-price">R$ 0<span>/6 meses</span></div>
-        <div class="plan-storage"><span data-gb>20 GB</span> grátis por 6 meses</div>
+        <div class="plan-storage"><span data-gb>15 GB</span> grátis por 6 meses</div>
         <ul class="plan-features">
           <li>Upload de arquivos</li>
           <li>Criação de pastas</li>
@@ -619,6 +655,7 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
       </div>
     </div>
     <div class="plans-footnote">Todos os planos pagos incluem upload ilimitado de arquivos e acesso 24/7.</div>
+    -->
   </div>
 </div>
 
@@ -712,7 +749,7 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
       </div>
       <div class="faq-item">
         <div class="faq-question" onclick="toggleFaq(this)">Como funciona o período grátis? <span class="faq-chevron">⌄</span></div>
-        <div class="faq-answer">Ao criar sua conta você já começa com <span data-gb>20 GB</span> grátis por 6 meses, sem precisar de cartão de crédito.</div>
+        <div class="faq-answer">Ao criar sua conta você já começa com <span data-gb>15 GB</span> grátis por 6 meses, sem precisar de cartão de crédito.</div>
       </div>
     </div>
     <div class="faq-help-card">
@@ -731,7 +768,7 @@ footer{background:var(--bg-deep);padding:50px 5% 30px;border-top:1px solid var(-
     <div class="cta-banner-text">
       <h2>Comece agora por<br>apenas R$4,99/mês</h2>
       <p>Menos de um café por mês para ter seus arquivos sempre seguros e acessíveis.</p>
-      <div class="hero-promo-note" style="color:rgba(255,255,255,0.75);">🎁 <span data-gb>20 GB</span> grátis por 6 meses para experimentar</div>
+      <div class="hero-promo-note" style="color:rgba(255,255,255,0.75);">🎁 <span data-gb>15 GB</span> grátis por 6 meses para experimentar</div>
     </div>
     <button class="btn-cta-banner" onclick="document.getElementById('planos').scrollIntoView({behavior:'smooth'})">Quero meu plano agora →</button>
   </div>
@@ -979,7 +1016,7 @@ async function enviarLeadFormulario(ev){
 
     <div id="modal-cadastro" style="display:none">
       <div class="auth-modal-title">Criar conta</div>
-      <div class="auth-modal-sub">Experimente <span data-gb>20 GB</span> grátis por 6 meses</div>
+      <div class="auth-modal-sub">Experimente <span data-gb>15 GB</span> grátis por 6 meses</div>
       <div class="field"><label>E-mail</label><input type="email" id="cad-email" placeholder="seu@email.com"></div>
       <div class="field"><label>Senha</label><input type="password" id="cad-senha" placeholder="Mínimo 6 caracteres"></div>
       <button class="btn btn-primary" style="width:100%;padding:13px;font-size:15px;" onclick="cadastrar()">Criar conta →</button>
@@ -1695,22 +1732,20 @@ if('serviceWorker' in navigator){
   }
 </script>
 <script>
-// ── CAMPANHA: contador de 72h + textos 20 GB/2 GB ──
+// ── CAMPANHA: Black Friday: contador + textos 15 GB/2 GB ──
 (function(){
   const setGB = gb => document.querySelectorAll('[data-gb]').forEach(e => e.textContent = gb + ' GB');
-  const grid = document.getElementById('plans-grid');
   const box  = document.getElementById('promo-timer');
   const pad  = n => String(n).padStart(2,'0');
   function encerrar(){
     if(box) box.hidden = true;
-    if(grid) grid.classList.remove('com-timer');
     setGB(2);
   }
   async function iniciar(){
     try{
       const r = await (await fetch((typeof API!=='undefined'?API:'https://cloudx-backend.vercel.app')+'/api/promo/campanha',{cache:'no-store'})).json();
       if(!r.ativa){ encerrar(); return; }
-      setGB(r.gb || 20);
+      setGB(r.gb || 15);
       // usa a hora do servidor (evita burlar mudando o relógio do aparelho)
       const delta = new Date(r.agora).getTime() - Date.now();
       const fim = new Date(r.fim).getTime();
@@ -1727,8 +1762,7 @@ if('serviceWorker' in navigator){
     }catch(e){
       // Sem resposta do servidor: esconde o contador e mantém a página funcionando
       if(box) box.hidden = true;
-      if(grid) grid.classList.remove('com-timer');
-    }
+      }
   }
   iniciar();
 })();
