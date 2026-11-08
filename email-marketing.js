@@ -23,6 +23,42 @@ const POR_LOTE = 2;          // e-mails por chamada (a Vercel limita o tempo de 
 const PAUSA_MS = 600;        // pausa entre um e-mail e outro dentro do lote
 const EMAIL_OK = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+// ── Anexos ──
+const ANEXO_TIPOS = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  txt: 'text/plain', csv: 'text/csv',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+const MAX_ANEXOS = 3;
+const MAX_ANEXOS_BYTES = 3 * 1024 * 1024;   // 3 MB no total: o arquivo viaja em base64 e a Vercel aceita no máximo 4,5 MB por requisição
+const ASSINATURAS = {                        // primeiros bytes de cada formato (impede enviar outro tipo de arquivo renomeado)
+  pdf: [0x25, 0x50, 0x44, 0x46], png: [0x89, 0x50, 0x4e, 0x47], jpg: [0xff, 0xd8, 0xff], jpeg: [0xff, 0xd8, 0xff],
+  gif: [0x47, 0x49, 0x46, 0x38], webp: [0x52, 0x49, 0x46, 0x46],
+};
+
+function validarAnexos(anexos) {
+  if (anexos == null) return { lista: [] };
+  if (!Array.isArray(anexos)) return { erro: 'Anexos em formato inválido.' };
+  if (anexos.length > MAX_ANEXOS) return { erro: `No máximo ${MAX_ANEXOS} anexos por e-mail.` };
+  let total = 0; const lista = [];
+  for (const a of anexos) {
+    const nome = String((a && a.nome) || '').replace(/[\\\/:*?"<>|\x00-\x1f]/g, '_').trim().slice(-100);
+    const ext = nome.includes('.') ? nome.split('.').pop().toLowerCase() : '';
+    if (!nome || !ANEXO_TIPOS[ext]) return { erro: `Tipo de arquivo não permitido: ${nome || '(sem nome)'}. Aceitos: ${Object.keys(ANEXO_TIPOS).join(', ')}.` };
+    if (typeof a.dados !== 'string' || !/^[A-Za-z0-9+\/=\s]+$/.test(a.dados)) return { erro: `Arquivo inválido: ${nome}.` };
+    const buffer = Buffer.from(a.dados, 'base64');
+    if (!buffer.length) return { erro: `Arquivo vazio: ${nome}.` };
+    total += buffer.length;
+    const sig = ASSINATURAS[ext];
+    if (sig && !sig.every((b, i) => buffer[i] === b)) return { erro: `O conteúdo de "${nome}" não parece ser um .${ext} de verdade.` };
+    lista.push({ nome, tipo: ANEXO_TIPOS[ext], buffer, dados: buffer.toString('base64') });
+  }
+  if (total > MAX_ANEXOS_BYTES) return { erro: `Os anexos somam ${(total / 1048576).toFixed(1)} MB; o limite é ${MAX_ANEXOS_BYTES / 1048576} MB no total.` };
+  return { lista };
+}
+
 const MSG_GMAIL = 'Gmail não configurado. Crie GMAIL_USER e GMAIL_APP_PASSWORD na Vercel e faça um Redeploy.';
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dormir = (ms) => new Promise(r => setTimeout(r, ms));
@@ -100,11 +136,12 @@ Você recebeu este e-mail porque tem uma conta no CloudX.<br>
   };
 }
 
-async function enviarUm(transp, { email, nome, assunto, corpo }) {
+async function enviarUm(transp, { email, nome, assunto, corpo, anexos }) {
   const m = montarMensagem(assunto, corpo, nome, email);
   await transp.sendMail({
     from: remetente(), to: email, subject: m.assunto, text: m.texto, html: m.html,
     headers: { 'List-Unsubscribe': `<${m.link}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+    attachments: (anexos || []).map(a => ({ filename: a.nome, content: a.buffer, contentType: a.tipo })),
   });
 }
 
@@ -190,10 +227,12 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
   app.post('/api/admin/email/teste', exigirAdmin, async (req, res) => {
     try {
       if (!gmailConfigurado()) return res.status(400).json({ ok: false, erro: MSG_GMAIL });
-      const { assunto, corpo } = req.body || {};
+      const { assunto, corpo, anexos } = req.body || {};
       const problema = validarTexto(assunto, corpo);
       if (problema) return res.status(400).json({ ok: false, erro: problema });
-      await enviarUm(criarTransporte(), { email: gmailUser(), nome: 'Teste', assunto: '[TESTE] ' + assunto, corpo });
+      const va = validarAnexos(anexos);
+      if (va.erro) return res.status(400).json({ ok: false, erro: va.erro });
+      await enviarUm(criarTransporte(), { email: gmailUser(), nome: 'Teste', assunto: '[TESTE] ' + assunto, corpo, anexos: va.lista });
       res.json({ ok: true, para: gmailUser() });
     } catch (e) {
       res.status(erroLogin(e) ? 400 : 500).json({ ok: false, erro: erroLogin(e) ? descreverErroLogin(e) : 'Falha no envio: ' + (e.response || e.message) });
@@ -204,10 +243,12 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
   app.post('/api/admin/email/preparar', exigirAdmin, async (req, res) => {
     try {
       if (!gmailConfigurado()) return res.status(400).json({ ok: false, erro: MSG_GMAIL });
-      const { assunto, corpo, publico } = req.body || {};
+      const { assunto, corpo, publico, anexos } = req.body || {};
       const problema = validarTexto(assunto, corpo);
       if (problema) return res.status(400).json({ ok: false, erro: problema });
       if (!PUBLICOS.includes(publico)) return res.status(400).json({ ok: false, erro: 'Público inválido.' });
+      const va = validarAnexos(anexos);
+      if (va.erro) return res.status(400).json({ ok: false, erro: va.erro });
 
       const db = getDB();
       const { pessoas } = await carregarBase(db);
@@ -217,6 +258,15 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       const { data: camp, error } = await db.from('email_campanhas')
         .insert({ assunto: assunto.trim(), corpo, publico, total: lista.length, status: 'enviando' }).select().single();
       if (error) throw error;
+      if (va.lista.length) {
+        const { error: eA } = await db.from('email_anexos').insert(va.lista.map(a => (
+          { campanha_id: camp.id, nome: a.nome, tipo: a.tipo, tamanho: a.buffer.length, dados: a.dados })));
+        if (eA) {
+          await db.from('email_campanhas').delete().eq('id', camp.id);
+          const e = new Error('Não consegui guardar os anexos (' + eA.message + '). Rode o arquivo email_anexos.sql no Supabase antes de enviar com anexo.');
+          e.pendente = true; throw e;
+        }
+      }
       for (let i = 0; i < lista.length; i += 500) {
         const { error: e2 } = await db.from('email_envios').insert(
           lista.slice(i, i + 500).map(p => ({ campanha_id: camp.id, email: p.email, nome: p.nome || null, status: 'pendente' })));
@@ -224,7 +274,7 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       }
       const sobra = LIMITE_DIA - await contarEnviadosHoje(db);
       res.json({
-        ok: true, campanhaId: camp.id, total: lista.length,
+        ok: true, campanhaId: camp.id, total: lista.length, anexos: va.lista.length,
         aviso: lista.length > sobra ? `Hoje ainda dá para enviar ${Math.max(0, sobra)} e-mails (limite de ${LIMITE_DIA}/dia). O resto continua amanhã pelo histórico.` : null,
       });
     } catch (e) { res.status(e.pendente ? 409 : 500).json({ ok: false, erro: e.message, tabelasPendentes: !!e.pendente }); }
@@ -249,6 +299,7 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
           status: concluida ? 'concluida' : (extra.pausar ? 'pausada' : 'enviando'),
           concluido_em: concluida ? new Date().toISOString() : null,
         }).eq('id', id);
+        if (concluida) await db.from('email_anexos').delete().eq('campanha_id', id);   // libera espaço no banco
         const { pausar, ...resto } = extra;
         return res.json({ ok: true, total: camp.total, ...t, concluida, ...resto });
       };
@@ -260,8 +311,15 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       const sobra = LIMITE_DIA - await contarEnviadosHoje(db);
       if (sobra <= 0) return resposta({ pausar: true, limiteDia: true, mensagem: `Limite diário de ${LIMITE_DIA} e-mails atingido. Continue amanhã pelo histórico.` });
 
+      // anexos da campanha (tabela inexistente = campanha sem anexos)
+      const { data: linhasA, error: eA } = await db.from('email_anexos').select('nome, tipo, dados').eq('campanha_id', id);
+      const semTabela = eA && (['42P01', 'PGRST205'].includes(eA.code) || /does not exist|could not find the table/i.test(eA.message || ''));
+      if (eA && !semTabela) throw eA;
+      const anexos = (linhasA || []).map(a => ({ nome: a.nome, tipo: a.tipo, buffer: Buffer.from(a.dados, 'base64') }));
+
+      // com anexo cada e-mail é mais pesado: 1 por chamada, para não estourar o tempo da Vercel
       const { data: fila } = await db.from('email_envios').select('id, email, nome')
-        .eq('campanha_id', id).eq('status', 'pendente').order('id').limit(Math.min(POR_LOTE, sobra));
+        .eq('campanha_id', id).eq('status', 'pendente').order('id').limit(Math.min(anexos.length ? 1 : POR_LOTE, sobra));
       if (!fila || !fila.length) return resposta({ enviadosLote: 0, falhasLote: 0 });
 
       // quem pediu descadastro depois de a campanha ser preparada não recebe
@@ -283,7 +341,7 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       for (let i = 0; i < lote.length; i++) {
         const dest = lote[i];
         try {
-          await enviarUm(transp, { email: dest.email, nome: dest.nome, assunto: camp.assunto, corpo: camp.corpo });
+          await enviarUm(transp, { email: dest.email, nome: dest.nome, assunto: camp.assunto, corpo: camp.corpo, anexos });
           await db.from('email_envios').update({ status: 'enviado', enviado_em: new Date().toISOString(), erro: null }).eq('id', dest.id);
           enviadosLote++;
         } catch (e) {
@@ -309,8 +367,10 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
     try {
       const id = Number(req.body && req.body.campanhaId);
       if (!id) return res.status(400).json({ ok: false, erro: 'campanhaId obrigatório.' });
-      const { error } = await getDB().from('email_campanhas').update({ status: 'cancelada' }).eq('id', id);
+      const db = getDB();
+      const { error } = await db.from('email_campanhas').update({ status: 'cancelada' }).eq('id', id);
       if (error) throw error;
+      await db.from('email_anexos').delete().eq('campanha_id', id);
       res.json({ ok: true });
     } catch (e) { res.status(500).json({ ok: false, erro: e.message }); }
   });
