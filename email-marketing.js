@@ -15,10 +15,12 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
 const PLANOS_PAGOS = ['basico', 'essencial', 'plus', 'premium'];
-const PUBLICOS = ['todos', 'ativos', 'inativos', 'gratuitos', 'pagos'];
+const PUBLICOS = ['todos', 'ativos', 'inativos', 'gratuitos', 'pagos', 'contatos'];
 const DIA_MS = 24 * 60 * 60 * 1000;
 const OFFSET_BR = 3 * 60 * 60 * 1000;                       // Brasília = UTC-3
 const LIMITE_DIA = Number(process.env.EMAIL_LIMITE_DIA) || 400;
+// Contatos importados (lista pessoal) recebem menos por dia: protege a reputação da conta. Ajuste com EMAIL_LIMITE_CONTATOS_DIA.
+const LIMITE_CONTATOS_DIA = Number(process.env.EMAIL_LIMITE_CONTATOS_DIA) || 30;
 const POR_LOTE = 2;          // e-mails por chamada (a Vercel limita o tempo de cada chamada)
 const PAUSA_MS = 600;        // pausa entre um e-mail e outro dentro do lote
 const EMAIL_OK = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -108,11 +110,15 @@ function verificarLink(e, t) {
 }
 
 // ── Monta o e-mail (texto + HTML simples, sem pixel de rastreio) ──
-function montarMensagem(assunto, corpo, nome, email) {
+function montarMensagem(assunto, corpo, nome, email, contato) {
   const primeiro = String(nome || '').trim().split(/\s+/)[0] || 'cliente';
   const troca = (s) => String(s).replace(/\{\{\s*nome\s*\}\}/gi, primeiro);
   const texto = troca(corpo).replace(/\r\n/g, '\n').trim();
   const link = linkDescadastro(email);
+  // Quem veio da lista pessoal NÃO tem conta no CloudX: o rodapé diz a verdade sobre por que recebeu
+  const motivo = contato
+    ? 'Você recebeu esta mensagem porque seu e-mail está na lista de contatos de quem criou o CloudX.'
+    : 'Você recebeu este e-mail porque tem uma conta no CloudX.';
 
   const paragrafos = esc(texto).split(/\n{2,}/).map(p =>
     '<p style="margin:0 0 16px">' +
@@ -124,20 +130,20 @@ function montarMensagem(assunto, corpo, nome, email) {
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:12px">
 <tr><td style="padding:32px;font-size:15px;line-height:1.65">${paragrafos}</td></tr>
 <tr><td style="padding:18px 32px 26px;border-top:1px solid #e5e7eb;font-size:12px;line-height:1.5;color:#6b7280">
-Você recebeu este e-mail porque tem uma conta no CloudX.<br>
+${esc(motivo)}<br>
 <a href="${esc(link)}" style="color:#6b7280">Não quero receber mais e-mails</a>
 </td></tr></table></td></tr></table></body></html>`;
 
   return {
     assunto: troca(assunto).replace(/[\r\n]+/g, ' ').trim(),
-    texto: `${texto}\n\n--\nVocê recebeu este e-mail porque tem uma conta no CloudX.\nPara não receber mais: ${link}\n`,
+    texto: `${texto}\n\n--\n${motivo}\nPara não receber mais: ${link}\n`,
     html,
     link,
   };
 }
 
-async function enviarUm(transp, { email, nome, assunto, corpo, anexos }) {
-  const m = montarMensagem(assunto, corpo, nome, email);
+async function enviarUm(transp, { email, nome, assunto, corpo, anexos, contato }) {
+  const m = montarMensagem(assunto, corpo, nome, email, contato);
   await transp.sendMail({
     from: remetente(), to: email, subject: m.assunto, text: m.texto, html: m.html,
     headers: { 'List-Unsubscribe': `<${m.link}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
@@ -160,10 +166,11 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
 
   // Quem pode receber: usuários cadastrados com e-mail válido, sem duplicados e SEM quem já se descadastrou
   async function carregarBase(db) {
-    const [usuarios, perfisRes, descRes] = await Promise.all([
+    const [usuarios, perfisRes, descRes, contRes] = await Promise.all([
       listarTodosUsuarios(db),
       db.from('perfis').select('id, plano, plano_expira_em'),
       db.from('email_descadastros').select('email'),
+      db.from('email_contatos').select('email, nome'),
     ]);
     if (perfisRes.error) throw perfisRes.error;
     if (descRes.error) {
@@ -186,15 +193,31 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       const m = u.user_metadata || {};
       pessoas.push({ email, nome: String(m.nome || m.full_name || m.name || '').trim(), pago, ativo: !!ultimo && agora - ultimo <= 30 * DIA_MS });
     }
-    return { pessoas, descadastrados: descad.size };
+    // contatos importados: fora quem já é usuário, quem se descadastrou e duplicados
+    const contatos = [];
+    if (!contRes.error) for (const c of (contRes.data || [])) {
+      const email = String(c.email || '').trim().toLowerCase();
+      if (!EMAIL_OK.test(email) || vistos.has(email) || descad.has(email)) continue;
+      vistos.add(email); contatos.push({ email, nome: String(c.nome || '').trim() });
+    }
+    return { pessoas, contatos, contatosOk: !contRes.error, descadastrados: descad.size };
   }
   const filtrar = (pessoas, publico) => pessoas.filter(p =>
     publico === 'todos' || (publico === 'ativos' && p.ativo) || (publico === 'inativos' && !p.ativo) ||
     (publico === 'pagos' && p.pago) || (publico === 'gratuitos' && !p.pago));
+  const destinatarios = (base, publico) => publico === 'contatos' ? base.contatos : filtrar(base.pessoas, publico);
 
   async function contarEnviadosHoje(db) {
     const { count } = await db.from('email_envios').select('id', { count: 'exact', head: true })
       .eq('status', 'enviado').gte('enviado_em', inicioHojeISO());
+    return count || 0;
+  }
+  async function contarEnviadosContatosHoje(db) {
+    const { data: camps } = await db.from('email_campanhas').select('id').eq('publico', 'contatos');
+    const ids = (camps || []).map(c => c.id);
+    if (!ids.length) return 0;
+    const { count } = await db.from('email_envios').select('id', { count: 'exact', head: true })
+      .eq('status', 'enviado').in('campanha_id', ids).gte('enviado_em', inicioHojeISO());
     return count || 0;
   }
   async function totais(db, id) {
@@ -214,10 +237,10 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       const db = getDB();
       const base = await carregarBase(db);
       const publicos = {};
-      PUBLICOS.forEach(p => { publicos[p] = filtrar(base.pessoas, p).length; });
+      PUBLICOS.forEach(p => { publicos[p] = destinatarios(base, p).length; });
       res.json({
         ok: true, gmailConfigurado: gmailConfigurado(), remetente: gmailUser() || null,
-        limiteDia: LIMITE_DIA, enviadosHoje: await contarEnviadosHoje(db),
+        limiteDia: LIMITE_DIA, limiteContatosDia: LIMITE_CONTATOS_DIA, enviadosHoje: await contarEnviadosHoje(db),
         descadastrados: base.descadastrados, publicos,
       });
     } catch (e) { res.status(e.pendente ? 409 : 500).json({ ok: false, erro: e.message, tabelasPendentes: !!e.pendente }); }
@@ -251,8 +274,12 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       if (va.erro) return res.status(400).json({ ok: false, erro: va.erro });
 
       const db = getDB();
-      const { pessoas } = await carregarBase(db);
-      const lista = filtrar(pessoas, publico);
+      const base = await carregarBase(db);
+      if (publico === 'contatos' && !base.contatosOk) {
+        const e = new Error('A tabela de contatos ainda não existe. Rode o arquivo email_contatos.sql no Supabase antes de usar.');
+        e.pendente = true; throw e;
+      }
+      const lista = destinatarios(base, publico);
       if (!lista.length) return res.status(400).json({ ok: false, erro: 'Nenhum destinatário nesse público.' });
 
       const { data: camp, error } = await db.from('email_campanhas')
@@ -272,10 +299,11 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
           lista.slice(i, i + 500).map(p => ({ campanha_id: camp.id, email: p.email, nome: p.nome || null, status: 'pendente' })));
         if (e2) throw e2;
       }
-      const sobra = LIMITE_DIA - await contarEnviadosHoje(db);
+      let sobra = LIMITE_DIA - await contarEnviadosHoje(db);
+      if (publico === 'contatos') sobra = Math.min(sobra, LIMITE_CONTATOS_DIA - await contarEnviadosContatosHoje(db));
       res.json({
         ok: true, campanhaId: camp.id, total: lista.length, anexos: va.lista.length,
-        aviso: lista.length > sobra ? `Hoje ainda dá para enviar ${Math.max(0, sobra)} e-mails (limite de ${LIMITE_DIA}/dia). O resto continua amanhã pelo histórico.` : null,
+        aviso: lista.length > sobra ? `Hoje ainda dá para enviar ${Math.max(0, sobra)} e-mails (limite de ${publico === 'contatos' ? LIMITE_CONTATOS_DIA : LIMITE_DIA}/dia). O resto continua amanhã pelo histórico.` : null,
       });
     } catch (e) { res.status(e.pendente ? 409 : 500).json({ ok: false, erro: e.message, tabelasPendentes: !!e.pendente }); }
   });
@@ -308,8 +336,13 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       await db.from('email_envios').update({ status: 'pendente' })
         .eq('campanha_id', id).eq('status', 'enviando').lt('reservado_em', new Date(Date.now() - 3 * 60 * 1000).toISOString());
 
-      const sobra = LIMITE_DIA - await contarEnviadosHoje(db);
-      if (sobra <= 0) return resposta({ pausar: true, limiteDia: true, mensagem: `Limite diário de ${LIMITE_DIA} e-mails atingido. Continue amanhã pelo histórico.` });
+      const ehContato = camp.publico === 'contatos';
+      let sobra = LIMITE_DIA - await contarEnviadosHoje(db), limiteAtual = LIMITE_DIA;
+      if (ehContato) {
+        const sobraC = LIMITE_CONTATOS_DIA - await contarEnviadosContatosHoje(db);
+        if (sobraC < sobra) { sobra = sobraC; limiteAtual = LIMITE_CONTATOS_DIA; }
+      }
+      if (sobra <= 0) return resposta({ pausar: true, limiteDia: true, mensagem: `Limite diário de ${limiteAtual} e-mails${ehContato && limiteAtual === LIMITE_CONTATOS_DIA ? ' para contatos importados' : ''} atingido. Continue amanhã pelo histórico.` });
 
       // anexos da campanha (tabela inexistente = campanha sem anexos)
       const { data: linhasA, error: eA } = await db.from('email_anexos').select('nome, tipo, dados').eq('campanha_id', id);
@@ -341,7 +374,7 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       for (let i = 0; i < lote.length; i++) {
         const dest = lote[i];
         try {
-          await enviarUm(transp, { email: dest.email, nome: dest.nome, assunto: camp.assunto, corpo: camp.corpo, anexos });
+          await enviarUm(transp, { email: dest.email, nome: dest.nome, assunto: camp.assunto, corpo: camp.corpo, anexos, contato: ehContato });
           await db.from('email_envios').update({ status: 'enviado', enviado_em: new Date().toISOString(), erro: null }).eq('id', dest.id);
           enviadosLote++;
         } catch (e) {
@@ -360,6 +393,45 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
         if (i < lote.length - 1) await dormir(PAUSA_MS);
       }
       return resposta({ enviadosLote, falhasLote });
+    } catch (e) { res.status(500).json({ ok: false, erro: e.message }); }
+  });
+
+  // ── Contatos importados (CSV do Google Contatos): lista pessoal de quem o dono do CloudX conhece ──
+  const SEM_RESPOSTA = /^(no-?reply|do-?not-?reply|mailer-daemon|postmaster)@/i;
+  app.post('/api/admin/email/contatos/importar', exigirAdmin, async (req, res) => {
+    try {
+      const { contatos, confirmou } = req.body || {};
+      if (confirmou !== true) return res.status(400).json({ ok: false, erro: 'Marque a confirmação de que são pessoas que você conhece e que podem pedir para sair.' });
+      if (!Array.isArray(contatos) || !contatos.length) return res.status(400).json({ ok: false, erro: 'Nenhum contato recebido.' });
+      if (contatos.length > 500) return res.status(400).json({ ok: false, erro: 'Envie no máximo 500 contatos por vez.' });
+      const db = getDB();
+      const { data: desc, error: eD } = await db.from('email_descadastros').select('email');
+      if (eD) { const e = new Error('Não consegui ler a lista de descadastros (' + eD.message + '). Rode o arquivo email_marketing.sql no Supabase.'); e.pendente = true; throw e; }
+      const descad = new Set((desc || []).map(d => String(d.email).toLowerCase()));
+      const vistos = new Set(), validos = [];
+      let invalidos = 0, duplicados = 0, descadastrados = 0;
+      for (const c of contatos) {
+        const email = String((c && c.email) || '').trim().toLowerCase();
+        if (!EMAIL_OK.test(email) || email.length > 200 || SEM_RESPOSTA.test(email) || email === gmailUser()) { invalidos++; continue; }
+        if (vistos.has(email)) { duplicados++; continue; }
+        vistos.add(email);
+        if (descad.has(email)) { descadastrados++; continue; }
+        validos.push({ email, nome: String((c && c.nome) || '').trim().slice(0, 100) || null, origem: 'csv' });
+      }
+      if (validos.length) {
+        const { error } = await db.from('email_contatos').upsert(validos, { onConflict: 'email' });
+        if (error) { const e = new Error('Não consegui guardar os contatos (' + error.message + '). Rode o arquivo email_contatos.sql no Supabase.'); e.pendente = true; throw e; }
+      }
+      res.json({ ok: true, importados: validos.length, invalidos, duplicados, descadastrados });
+    } catch (e) { res.status(e.pendente ? 409 : 500).json({ ok: false, erro: e.message }); }
+  });
+
+  // Apaga TODA a lista importada (direito de exclusão: quem pedir para sair também some daqui pelo descadastro)
+  app.post('/api/admin/email/contatos/limpar', exigirAdmin, async (req, res) => {
+    try {
+      const { error } = await getDB().from('email_contatos').delete().neq('email', '');
+      if (error) throw error;
+      res.json({ ok: true });
     } catch (e) { res.status(500).json({ ok: false, erro: e.message }); }
   });
 

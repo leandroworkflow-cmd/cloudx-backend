@@ -512,9 +512,29 @@
       </div>
 
       <div class="panel">
+        <h2>📇 Importar contatos</h2>
+        <p class="subtitle" style="margin-bottom:14px">Traga sua lista pessoal do Google Contatos para enviar uma mensagem de apresentação do CloudX.</p>
+        <div class="email-form">
+          <div class="form-field"><label>Arquivo CSV</label><input type="file" id="emailCsv" accept=".csv,text/csv"></div>
+          <label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;cursor:pointer">
+            <input type="checkbox" id="emailCsvOk" style="margin-top:3px;flex:none">
+            <span>Confirmo que são pessoas que eu conheço e que têm relação comigo, que a mensagem será pessoal e honesta, e que quem pedir para sair será respeitado.</span>
+          </label>
+          <div class="email-botoes">
+            <button class="btn-sec" id="btnCsv" onclick="emailImportarCsv()">Importar contatos</button>
+            <button class="btn-sec" style="color:var(--red)" onclick="emailLimparContatos()">Apagar contatos importados</button>
+          </div>
+          <div id="emailCsvMsg"></div>
+          <div class="dica"><b>Como exportar:</b> em contacts.google.com, clique em <b>Exportar</b> e escolha <b>Google CSV</b>. O painel lê nome e e-mail, tira repetidos, endereços inválidos e "no-reply", e pula quem já se descadastrou. Contatos importados recebem no máximo <b id="emailLimiteContatosTxt">30</b> e-mails por dia (proteção da conta) e o e-mail informa que a pessoa está na sua lista de contatos.</div>
+        </div>
+      </div>
+
+      <div class="panel">
         <h2>✉️ Nova mensagem</h2>
         <div class="email-form">
-          <div class="form-field"><label>Quem recebe</label><select id="emailPublico"></select></div>
+          <div class="form-field"><label>Quem recebe</label><select id="emailPublico" onchange="emailMudouPublico()"></select>
+            <div class="dica" id="emailAvisoContatos" style="display:none;margin-top:8px"></div>
+          </div>
           <div class="form-field"><label>Assunto</label><input type="text" id="emailAssunto" maxlength="150" placeholder="Ex: Novidades no CloudX, {{nome}}!"></div>
           <div class="form-field"><label>Mensagem</label><textarea id="emailCorpo" rows="9" placeholder="Olá {{nome}},&#10;&#10;Escreva aqui a sua mensagem..."></textarea></div>
           <div class="dica">Use <b>{{nome}}</b> para colocar o primeiro nome da pessoa (sem nome cadastrado, vira "cliente"). Links colados no texto ficam clicáveis. Cada e-mail sai individual, em ritmo lento, sem rastreador, e leva o link para a pessoa se descadastrar.</div>
@@ -1123,6 +1143,7 @@
   const ROTULOS_PUBLICO = {
     todos: 'Todos os usuários', ativos: 'Ativos (acessaram nos últimos 30 dias)',
     inativos: 'Inativos (sem acesso há mais de 30 dias)', gratuitos: 'Plano gratuito', pagos: 'Plano pago',
+    contatos: 'Contatos importados (minha lista pessoal)',
   };
   let emailRodando = false, emailParar = false, emailPublicos = {};
 
@@ -1171,6 +1192,8 @@
       }
       mostrarSemToken(false);
       emailPublicos = s.publicos;
+      emailLimiteContatos = s.limiteContatosDia || 30;
+      setTxt("emailLimiteContatosTxt", emailLimiteContatos);
       setTxt('emGmail', s.gmailConfigurado ? 'Conectado' : 'Não configurado');
       document.getElementById('emGmail').style.color = s.gmailConfigurado ? 'var(--green)' : 'var(--red)';
       setTxt('emGmailSub', s.gmailConfigurado ? s.remetente : 'crie GMAIL_USER e GMAIL_APP_PASSWORD na Vercel');
@@ -1281,6 +1304,85 @@
     emailRodando = false;
     document.getElementById('btnEmailEnviar').disabled = false;
     carregarEmail(true);
+  }
+
+  // ── contatos importados (CSV do Google Contatos) ──
+  let emailLimiteContatos = 30;
+
+  function csvMsg(tipo, texto) {
+    document.getElementById('emailCsvMsg').innerHTML = texto ? `<div class="alerta ${tipo}">${tipo === 'ok' ? '✅' : '⚠'} ${esc(texto)}</div>` : '';
+  }
+
+  function emailMudouPublico() {
+    const aviso = document.getElementById('emailAvisoContatos');
+    const ehContatos = document.getElementById('emailPublico').value === 'contatos';
+    aviso.style.display = ehContatos ? 'block' : 'none';
+    aviso.textContent = ehContatos
+      ? `Contatos importados: no máximo ${emailLimiteContatos} e-mails por dia, para proteger a conta. O envio continua no dia seguinte pelo histórico. O e-mail avisa que a pessoa está na sua lista de contatos. Escreva uma mensagem pessoal, dizendo quem você é e por que está escrevendo.`
+      : '';
+  }
+
+  // Lê CSV (vírgula, ponto e vírgula ou tab; campos entre aspas; quebras de linha dentro de aspas)
+  function lerCsv(texto) {
+    texto = texto.replace(/^\uFEFF/, '');
+    const primeira = texto.split(/\r?\n/)[0] || '';
+    const sep = [',', ';', '\t'].map(c => [c, primeira.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const linhas = []; let campo = '', linha = [], aspas = false;
+    for (let i = 0; i < texto.length; i++) {
+      const c = texto[i];
+      if (aspas) {
+        if (c === '"') { if (texto[i + 1] === '"') { campo += '"'; i++; } else aspas = false; } else campo += c;
+      } else if (c === '"') aspas = true;
+      else if (c === sep) { linha.push(campo); campo = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && texto[i + 1] === '\n') i++; linha.push(campo); campo = ''; if (linha.some(x => x.trim())) linhas.push(linha); linha = []; }
+      else campo += c;
+    }
+    linha.push(campo); if (linha.some(x => x.trim())) linhas.push(linha);
+    return linhas;
+  }
+
+  function extrairContatos(linhas) {
+    if (linhas.length < 2) return [];
+    const cab = linhas[0].map(h => h.trim().toLowerCase());
+    const colsEmail = cab.map((h, i) => (/e-?mail/.test(h) && !/label|type|tipo|rótulo/.test(h)) ? i : -1).filter(i => i >= 0);
+    const col = (...nomes) => cab.findIndex(h => nomes.includes(h));
+    const iNome = col('name', 'nome', 'display name'), iPri = col('first name', 'given name', 'nome próprio'), iUlt = col('last name', 'family name', 'sobrenome');
+    const out = [];
+    for (const l of linhas.slice(1)) {
+      let nome = ((iNome >= 0 ? l[iNome] : '') || ((iPri >= 0 ? l[iPri] : '') + ' ' + (iUlt >= 0 ? l[iUlt] : ''))).replace(/\s+/g, ' ').trim();
+      for (const i of colsEmail) {
+        String(l[i] || '').split(/\s*(?::::|;)\s*/).forEach(e => { e = e.trim(); if (e) out.push({ email: e, nome }); });
+      }
+    }
+    return out;
+  }
+
+  async function emailImportarCsv() {
+    const arq = document.getElementById('emailCsv').files[0];
+    if (!document.getElementById('emailCsvOk').checked) { csvMsg('atencao', 'Marque a confirmação antes de importar.'); return; }
+    if (!arq) { csvMsg('atencao', 'Escolha o arquivo CSV exportado do Google Contatos.'); return; }
+    const btn = document.getElementById('btnCsv'); btn.disabled = true; btn.textContent = 'Importando...';
+    try {
+      const texto = await new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => falha(new Error('Não consegui ler o arquivo.')); r.readAsText(arq, 'utf-8'); });
+      const contatos = extrairContatos(lerCsv(texto));
+      if (!contatos.length) { csvMsg('atencao', 'Não encontrei e-mails nesse arquivo. Exporte como "Google CSV" no Google Contatos.'); return; }
+      const total = { importados: 0, invalidos: 0, duplicados: 0, descadastrados: 0 };
+      for (let i = 0; i < contatos.length; i += 400) {
+        const r = await emailChamar('/contatos/importar', { contatos: contatos.slice(i, i + 400), confirmou: true });
+        if (!r.ok) { csvMsg('critico', r.erro || 'Erro ao importar.'); return; }
+        Object.keys(total).forEach(k => { total[k] += r[k] || 0; });
+      }
+      csvMsg('ok', `${total.importados} contatos importados. Ignorados: ${total.invalidos} inválidos, ${total.duplicados} repetidos, ${total.descadastrados} já descadastrados.`);
+      document.getElementById('emailCsv').value = ''; document.getElementById('emailCsvOk').checked = false;
+      carregarEmail(true);
+    } catch (e) { csvMsg('critico', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Importar contatos'; }
+  }
+
+  async function emailLimparContatos() {
+    if (!confirm('Apagar TODOS os contatos importados? Quem se descadastrou continua bloqueado.')) return;
+    try { const r = await emailChamar('/contatos/limpar', {}); csvMsg(r.ok ? 'ok' : 'critico', r.ok ? 'Contatos importados apagados.' : r.erro); carregarEmail(true); }
+    catch (e) { csvMsg('critico', e.message); }
   }
 
   // ── anexos do e-mail ──
