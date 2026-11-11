@@ -256,6 +256,11 @@
   .wa-sug-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
   .wa-sug-item:last-child { border-bottom: 0; }
   .wa-sug-item small { color: var(--muted); display: block; font-size: 11px; }
+  .wa-sug-item { cursor: pointer; }
+  .wa-sug-item:hover { background: rgba(92,157,255,.12); }
+  .wa-sel { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-top: 12px; background: var(--bg); }
+  .wa-sel-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .wa-prev { white-space: pre-wrap; font-size: 13px; background: rgba(61,220,132,.08); border: 1px solid rgba(61,220,132,.25); border-radius: 8px; padding: 10px; margin: 10px 0; }
   .wa-sug-vazio { padding: 12px; color: var(--muted); font-size: 12px; }
   .ia-chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip-ia { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 20px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
@@ -635,6 +640,7 @@
               <input type="text" id="waNovoTel" maxlength="25" placeholder="Telefone com DDD, ex.: (31) 99999-9999">
               <button class="btn-sec" onclick="waAdicionar()">Adicionar</button>
             </div>
+            <div id="waSelCard" class="wa-sel" style="display:none"></div>
           </div>
           <label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;cursor:pointer">
             <input type="checkbox" id="waCsvOk" style="margin-top:3px;flex:none">
@@ -659,7 +665,7 @@
             </div>
             <div id="waMsgIa"></div>
           </div>
-          <div class="form-field"><label>Mensagem que será pré-preenchida</label><textarea id="waMensagem" rows="5" placeholder="Oi {{nome}}, tudo bem? ..."></textarea></div>
+          <div class="form-field"><label>Mensagem que será pré-preenchida</label><textarea id="waMensagem" rows="5" oninput="waRenderSel()" placeholder="Oi {{nome}}, tudo bem? ..."></textarea></div>
           <div class="dica"><b>{{nome}}</b> vira o primeiro nome do contato. Ao clicar em <b>Abrir no WhatsApp</b>, a conversa abre com o texto pronto e <b>você aperta enviar</b>; o contato passa a contar como aberto. Mande só para quem você conhece, no máximo uns 20 por dia, e pare se alguém reclamar: mensagem em massa para quem não conhece pode levar o WhatsApp a restringir o seu número.</div>
         </div>
       </div>
@@ -1457,7 +1463,7 @@
     try {
       const r = await emailChamar('/ia', { objetivo, tom: document.getElementById('waTom').value, publico: 'contatos', canal: 'whatsapp', nome: iaNome() });
       if (!r.ok) { iaAviso('waMsgIa', 'critico', r.erro || 'A IA não respondeu.'); return; }
-      document.getElementById('waMensagem').value = r.mensagem;
+      document.getElementById('waMensagem').value = r.mensagem; waRenderSel();
       iaAviso('waMsgIa', 'ok', 'Mensagem pronta. Leia e ajuste antes de abrir as conversas.');
     } catch (e) { iaAviso('waMsgIa', 'critico', e.message); }
     finally { btn.disabled = false; btn.textContent = '✨ Gerar mensagem'; }
@@ -1526,13 +1532,40 @@
     const achados = waContatos.filter(c => sem(c.nome).includes(t) || (digitos.length >= 3 && c.telefone.includes(digitos)));
     if (!achados.length) { box.innerHTML = '<div class="wa-sug-vazio">Nenhum contato pendente com esse nome. Se for novo, preencha o telefone e clique em Adicionar.</div>'; box.style.display = 'block'; return; }
     box.innerHTML = achados.slice(0, 8).map(c =>
-      `<div class="wa-sug-item"><div>${esc(c.nome || '(sem nome)')}<small>+${esc(c.telefone)}</small></div>` +
-      `<button type="button" class="btn-sec" style="padding:6px 10px;font-size:12px;white-space:nowrap" onclick="waAbrirDaBusca('${esc(c.telefone)}')">Abrir no WhatsApp</button></div>`).join('') +
+      `<div class="wa-sug-item" onclick="waSelecionar('${esc(c.telefone)}')"><div>${esc(c.nome || '(sem nome)')}<small>+${esc(c.telefone)}</small></div>` +
+      `<span style="color:var(--blue);font-size:12px;white-space:nowrap">Selecionar</span></div>`).join('') +
       (achados.length > 8 ? `<div class="wa-sug-vazio">+${achados.length - 8} resultados. Continue digitando para filtrar.</div>` : '');
     box.style.display = 'block';
   }
   function waFecharSug() { document.getElementById('waSug').style.display = 'none'; }
-  function waAbrirDaBusca(tel) { waFecharSug(); document.getElementById('waNovoNome').value = ''; waAbrir(tel); }
+  let waSel = null;   // contato escolhido na lista
+  function waSelecionar(tel) {
+    const c = waContatos.find(x => x.telefone === tel); if (!c) return;
+    waSel = c; waFecharSug();
+    document.getElementById('waNovoNome').value = c.nome || '';
+    document.getElementById('waNovoTel').value = '';
+    waRenderSel();
+  }
+  function waTrocarSel() { waSel = null; document.getElementById('waNovoNome').value = ''; waRenderSel(); document.getElementById('waNovoNome').focus(); }
+  function waIrMensagem() {
+    const alvo = document.getElementById('waObjetivo'); alvo.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => alvo.focus(), 350);
+  }
+  function waRenderSel() {
+    const box = document.getElementById('waSelCard');
+    if (!waSel) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    const msg = document.getElementById('waMensagem').value, pronto = msg.trim().length >= 10;
+    box.innerHTML =
+      `<div class="wa-sel-topo"><div><b>${esc(waSel.nome || '(sem nome)')}</b> <span class="lead-data">+${esc(waSel.telefone)}</span></div>` +
+      `<a class="link-aba" style="color:var(--muted)" onclick="waTrocarSel()">✕ trocar</a></div>` +
+      (pronto
+        ? `<div class="wa-prev">${esc(waTexto(msg, waSel))}</div>`
+        : `<div class="wa-sug-vazio" style="padding:10px 0">Ainda não há mensagem. Escreva o que quer comunicar em <b>Escrever com IA</b> (logo abaixo), clique em <b>Gerar mensagem</b> e o texto aparece aqui.</div>`) +
+      `<div class="ia-linha">` +
+      (pronto ? '' : `<button type="button" class="btn-sec" onclick="waIrMensagem()">↓ Ir para a mensagem</button>`) +
+      `<button type="button" class="btn-sec" onclick="waAbrir('${esc(waSel.telefone)}')">💬 Abrir no WhatsApp</button></div>` +
+      `<div class="dica" style="margin-top:10px">O WhatsApp abre com o texto pronto e <b>você aperta enviar</b>.</div>`;
+    box.style.display = 'block';
+  }
   document.addEventListener('click', e => { if (!e.target.closest('.wa-sug-wrap')) waFecharSug(); });
 
   function waTexto(modelo, contato) {
@@ -1543,12 +1576,13 @@
   async function waAbrir(tel) {
     const i = waContatos.findIndex(x => x.telefone === tel), c = waContatos[i], modelo = document.getElementById('waMensagem').value;
     if (!c) return;
-    if (modelo.trim().length < 10) { waAviso('atencao', 'Escreva a mensagem (ou gere com a IA) antes de abrir o WhatsApp.'); return; }
+    if (modelo.trim().length < 10) { waAviso('atencao', 'Escreva a mensagem (ou gere com a IA) antes de abrir o WhatsApp.'); waIrMensagem(); return; }
     const hoje = Number(document.getElementById('waHoje').dataset.n || 0);
     if (hoje >= WA_LIMITE_DIA && !confirm(`Você já abriu ${hoje} conversas hoje. Para proteger o seu número, o ideal é parar por hoje. Abrir mesmo assim?`)) return;
     waAviso('', '');
     window.open('https://wa.me/' + c.telefone + '?text=' + encodeURIComponent(waTexto(modelo, c)), '_blank', 'noopener');
     waContatos.splice(i, 1); renderizarWhatsLista();
+    if (waSel && waSel.telefone === c.telefone) { waSel = null; document.getElementById('waNovoNome').value = ''; waRenderSel(); }
     try { await emailChamar('/whatsapp/marcar', { telefone: c.telefone, status: 'enviado' }); } catch (e) {}
     carregarWhats(true);
   }
