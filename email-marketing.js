@@ -154,6 +154,75 @@ async function enviarUm(transp, { email, nome, assunto, corpo, anexos, contato }
 const erroLogin = (e) => !!e && (e.code === 'EAUTH' || e.responseCode === 535);
 const erroCota = (e) => !!e && /quota|limit exceeded|5\.4\.5|4\.2\.1|too many/i.test(String(e.response || e.message || ''));
 
+// ── IA (Groq, plano gratuito) ──
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const groqModelo = () => limpar(process.env.GROQ_MODEL) || 'openai/gpt-oss-120b';
+// Chave própria do gerador de mensagens (GROQ_API_KEY_MENSENGER); sem ela, usa a GROQ_API_KEY que o chatbot já usa
+const chaveGroq = () => limpar(process.env.GROQ_API_KEY_MENSENGER) || limpar(process.env.GROQ_API_KEY);
+const TONS = ['pessoal e simples', 'profissional', 'animado e amigável'];
+const CONTEXTO_PUBLICO = {
+  contatos: 'Contatos pessoais do remetente que ainda não conhecem o CloudX. É uma apresentação pessoal: diga quem é, por que está escrevendo, o que é o CloudX e convide, sem pressionar.',
+  gratuitos: 'Usuários que já criaram conta no plano gratuito. Incentive a usar mais e a conhecer os planos pagos, sem pressão.',
+  pagos: 'Clientes de plano pago. Agradeça e lembre os benefícios; fale de renovação só se o pedido mencionar.',
+  inativos: 'Usuários que não acessam há mais de 30 dias. Reative com gentileza, sem culpar ninguém.',
+  ativos: 'Usuários cadastrados do CloudX que usam o serviço.',
+  todos: 'Usuários cadastrados do CloudX.',
+};
+
+function promptsIA({ objetivo, tom, publico, canal, nome }) {
+  const site = baseUrl();
+  const regras = [
+    'Você é redator de marketing do CloudX, um serviço brasileiro de armazenamento de arquivos na nuvem. Escreva em português do Brasil.',
+    'Regras:',
+    '- Use SOMENTE os fatos que o remetente informar (preços, prazos, GB, benefícios). Nunca invente números, descontos ou prazos.',
+    '- Seja honesto e direto: sem exagero, sem urgência falsa e sem palavras típicas de spam (nada de TUDO EM MAIÚSCULAS, excesso de exclamações, "100% garantido", "clique aqui agora").',
+    '- Escreva como uma pessoa escreve para outra: curto, simples, com um único chamado para ação.',
+    '- Use {{nome}} exatamente uma vez, na saudação (o sistema troca pelo primeiro nome).',
+    `- O único link permitido é ${site}`,
+    '- Sem markdown, sem hashtags e no máximo 1 emoji.',
+    nome ? `- Assine com o nome: ${nome}.` : '- Não invente nome de remetente; termine apenas com uma despedida simples.',
+    'Responda SOMENTE com um JSON válido, sem nenhum texto antes ou depois.',
+  ].join('\n');
+  const formato = canal === 'whatsapp'
+    ? 'Formato: {"mensagem":"..."}. A mensagem tem no máximo 60 palavras, é informal, sem assunto, e termina com o convite e o link.'
+    : 'Formato: {"assuntos":["...","...","..."],"mensagem":"..."}. Os 3 assuntos têm no máximo 60 caracteres e são diferentes entre si. A mensagem tem de 80 a 140 palavras, com parágrafos separados por linha em branco.';
+  const usuario = [
+    `Pedido do remetente: ${objetivo}`,
+    `Tom: ${tom}`,
+    `Público: ${CONTEXTO_PUBLICO[publico] || CONTEXTO_PUBLICO.todos}`,
+    formato,
+  ].join('\n');
+  return [{ role: 'system', content: regras }, { role: 'user', content: usuario }];
+}
+
+// Extrai o JSON da resposta mesmo se a IA colocar cercas de código ou texto em volta
+function lerRespostaIA(texto) {
+  const bruto = String(texto || '').replace(/```(?:json)?/gi, '').trim();
+  const i = bruto.indexOf('{'), f = bruto.lastIndexOf('}');
+  let obj = null;
+  if (i >= 0 && f > i) { try { obj = JSON.parse(bruto.slice(i, f + 1)); } catch (e) { obj = null; } }
+  const cortar = (v, n) => String(v || '').replace(/\r\n/g, '\n').trim().slice(0, n);
+  if (obj && (obj.mensagem || obj.assuntos)) {
+    return {
+      assuntos: (Array.isArray(obj.assuntos) ? obj.assuntos : []).map(a => cortar(a, 120).replace(/\n/g, ' ')).filter(Boolean).slice(0, 3),
+      mensagem: cortar(obj.mensagem, 4000),
+    };
+  }
+  return { assuntos: [], mensagem: cortar(bruto, 4000) };   // IA não devolveu JSON: usa o texto inteiro como rascunho
+}
+
+// Telefone → só dígitos com DDI (Brasil por padrão). Devolve null se não parecer um telefone.
+function normalizarTelefone(t) {
+  const original = String(t == null ? '' : t);
+  const comMais = /^\s*\+/.test(original);                  // "+" = o número já traz o código do país
+  let d = original.replace(/\D/g, '');
+  if (!comMais) {
+    d = d.replace(/^0+/, '');
+    if (d.length === 10 || d.length === 11) d = '55' + d;   // sem código do país: assume Brasil
+  }
+  return d.length >= (comMais ? 11 : 12) && d.length <= 15 ? d : null;
+}
+
 module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuarios, tokenAdminValido }) {
 
   // ── Tudo aqui exige o ADMIN_TOKEN ──
@@ -430,6 +499,111 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
   app.post('/api/admin/email/contatos/limpar', exigirAdmin, async (req, res) => {
     try {
       const { error } = await getDB().from('email_contatos').delete().neq('email', '');
+      if (error) throw error;
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false, erro: e.message }); }
+  });
+
+  // ── IA: gera assuntos e rascunho (e-mail ou WhatsApp). Só o texto do pedido vai para a IA, nunca dados de clientes ──
+  app.post('/api/admin/email/ia', exigirAdmin, async (req, res) => {
+    try {
+      const chave = chaveGroq();
+      if (!chave) return res.status(400).json({ ok: false, erro: 'IA não configurada. Crie a variável GROQ_API_KEY_MENSENGER na Vercel e faça um Redeploy.' });
+      const { objetivo, tom, publico, canal, nome } = req.body || {};
+      if (typeof objetivo !== 'string' || objetivo.trim().length < 10 || objetivo.length > 1500)
+        return res.status(400).json({ ok: false, erro: 'Descreva o que você quer comunicar (de 10 a 1500 letras).' });
+      const modelo = groqModelo();
+      const corpo = {
+        model: modelo,
+        messages: promptsIA({
+          objetivo: objetivo.trim(), tom: TONS.includes(tom) ? tom : TONS[0], publico,
+          canal: canal === 'whatsapp' ? 'whatsapp' : 'email', nome: limpar(nome).replace(/[\r\n]+/g, ' ').slice(0, 40),
+        }),
+        temperature: 0.7,
+        max_completion_tokens: 2000,
+      };
+      if (/gpt-oss|qwen3/i.test(modelo)) corpo.reasoning_effort = 'low';   // modelos de raciocínio: resposta rápida, sem gastar o limite
+
+      const r = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chave}` },
+        body: JSON.stringify(corpo),
+        signal: AbortSignal.timeout(25000),
+      });
+      if (r.status === 401 || r.status === 403) return res.status(400).json({ ok: false, erro: 'A Groq recusou a chave. Gere outra em console.groq.com e atualize GROQ_API_KEY_MENSENGER na Vercel (depois, Redeploy).' });
+      if (r.status === 429) return res.status(429).json({ ok: false, erro: 'Limite gratuito da Groq atingido. Espere alguns minutos e tente de novo.' });
+      let dados = null; try { dados = await r.json(); } catch (e) {}
+      if (!r.ok) return res.status(502).json({ ok: false, erro: `A Groq respondeu com erro ${r.status}: ${String((dados && dados.error && dados.error.message) || 'sem detalhes').slice(0, 200)}` });
+      const saida = lerRespostaIA(dados && dados.choices && dados.choices[0] && dados.choices[0].message && dados.choices[0].message.content);
+      if (!saida.mensagem) return res.status(502).json({ ok: false, erro: 'A IA não devolveu texto. Tente de novo, ou descreva o pedido com mais detalhes.' });
+      res.json({ ok: true, ...saida, modelo });
+    } catch (e) {
+      const demorou = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
+      res.status(demorou ? 504 : 500).json({ ok: false, erro: demorou ? 'A IA demorou demais. Tente de novo.' : 'Falha ao falar com a IA: ' + e.message });
+    }
+  });
+
+  // ── WhatsApp: lista de contatos para envio MANUAL, um por vez (botão "Abrir no WhatsApp"). Nada é enviado pelo servidor ──
+  const MSG_WA_TABELA = 'A tabela de WhatsApp ainda não existe. Rode o arquivo whatsapp_contatos.sql no Supabase antes de usar.';
+
+  app.post('/api/admin/email/whatsapp/importar', exigirAdmin, async (req, res) => {
+    try {
+      const { contatos, confirmou } = req.body || {};
+      if (confirmou !== true) return res.status(400).json({ ok: false, erro: 'Marque a confirmação de que são pessoas que você conhece e que podem pedir para sair.' });
+      if (!Array.isArray(contatos) || !contatos.length) return res.status(400).json({ ok: false, erro: 'Nenhum contato recebido.' });
+      if (contatos.length > 500) return res.status(400).json({ ok: false, erro: 'Envie no máximo 500 contatos por vez.' });
+      const vistos = new Set(), validos = [];
+      let invalidos = 0, duplicados = 0;
+      for (const c of contatos) {
+        const telefone = normalizarTelefone(c && c.telefone);
+        if (!telefone) { invalidos++; continue; }
+        if (vistos.has(telefone)) { duplicados++; continue; }
+        vistos.add(telefone);
+        validos.push({ telefone, nome: String((c && c.nome) || '').trim().slice(0, 100) || null });
+      }
+      if (validos.length) {
+        // só telefone e nome: quem já estava na lista mantém o status (enviado / não enviar)
+        const { error } = await getDB().from('whatsapp_contatos').upsert(validos, { onConflict: 'telefone' });
+        if (error) { const e = new Error(MSG_WA_TABELA + ' (' + error.message + ')'); e.pendente = true; throw e; }
+      }
+      res.json({ ok: true, importados: validos.length, invalidos, duplicados });
+    } catch (e) { res.status(e.pendente ? 409 : 500).json({ ok: false, erro: e.message }); }
+  });
+
+  app.get('/api/admin/email/whatsapp/contatos', exigirAdmin, async (req, res) => {
+    try {
+      const db = getDB();
+      const cont = async (st) => {
+        const q = db.from('whatsapp_contatos').select('telefone', { count: 'exact', head: true });
+        return (st ? await q.eq('status', st) : await q);
+      };
+      const [tot, novos, env, nao] = await Promise.all([cont(null), cont('novo'), cont('enviado'), cont('nao_enviar')]);
+      if (tot.error) { const e = new Error(MSG_WA_TABELA + ' (' + tot.error.message + ')'); e.pendente = true; throw e; }
+      const { data: pend } = await db.from('whatsapp_contatos').select('telefone, nome').eq('status', 'novo').order('criado_em').limit(100);
+      const { count: hoje } = await db.from('whatsapp_contatos').select('telefone', { count: 'exact', head: true })
+        .eq('status', 'enviado').gte('enviado_em', inicioHojeISO());
+      res.json({
+        ok: true, contatos: pend || [],
+        resumo: { total: tot.count || 0, pendentes: novos.count || 0, enviados: env.count || 0, naoEnviar: nao.count || 0, enviadosHoje: hoje || 0 },
+      });
+    } catch (e) { res.status(e.pendente ? 409 : 500).json({ ok: false, erro: e.message }); }
+  });
+
+  app.post('/api/admin/email/whatsapp/marcar', exigirAdmin, async (req, res) => {
+    try {
+      const { telefone, status } = req.body || {};
+      const tel = normalizarTelefone(telefone);
+      if (!tel || !['novo', 'enviado', 'nao_enviar'].includes(status)) return res.status(400).json({ ok: false, erro: 'Dados inválidos.' });
+      const { error } = await getDB().from('whatsapp_contatos')
+        .update({ status, enviado_em: status === 'enviado' ? new Date().toISOString() : null }).eq('telefone', tel);
+      if (error) throw error;
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false, erro: e.message }); }
+  });
+
+  app.post('/api/admin/email/whatsapp/limpar', exigirAdmin, async (req, res) => {
+    try {
+      const { error } = await getDB().from('whatsapp_contatos').delete().neq('telefone', '');
       if (error) throw error;
       res.json({ ok: true });
     } catch (e) { res.status(500).json({ ok: false, erro: e.message }); }

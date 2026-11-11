@@ -242,6 +242,17 @@
   .btn-add-campanha:disabled, .btn-sec:disabled { opacity: 0.45; cursor: not-allowed; }
   .progresso-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 4px; font-size: 13px; flex-wrap: wrap; }
   .badge.aviso { background: rgba(255,200,87,0.15); color: var(--yellow); }
+
+  /* ── IA e WhatsApp ── */
+  .ia-box { background: rgba(59,130,246,0.07); border: 1px solid rgba(59,130,246,0.35); border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
+  .ia-titulo { font-weight: 700; font-size: 13px; }
+  .ia-titulo span { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .ia-linha { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .ia-linha select, .ia-linha input { padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+  .ia-linha input { min-width: 190px; }
+  .ia-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip-ia { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 20px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .chip-ia:hover { border-color: var(--purple); }
 </style>
 </head>
 <body>
@@ -256,6 +267,7 @@
   <div class="nav-item" data-tab="campanhas">📣 Campanhas</div>
   <div class="nav-item" data-tab="analytics">📈 Visitas</div>
     <div class="nav-item" data-tab="email">✉️ E-mail</div>
+    <div class="nav-item" data-tab="whats">💬 WhatsApp</div>
 </div>
 
 <div class="main">
@@ -535,6 +547,17 @@
           <div class="form-field"><label>Quem recebe</label><select id="emailPublico" onchange="emailMudouPublico()"></select>
             <div class="dica" id="emailAvisoContatos" style="display:none;margin-top:8px"></div>
           </div>
+          <div class="ia-box">
+            <div class="ia-titulo">✨ Escrever com IA <span>(gera um rascunho para você revisar; nada é enviado)</span></div>
+            <div class="form-field"><label>O que você quer comunicar?</label><textarea id="iaObjetivo" rows="3" placeholder="Ex: Apresentar o CloudX a amigos. 15 GB grátis por 6 meses, sem cartão. Quero convidar para criar a conta."></textarea></div>
+            <div class="ia-linha">
+              <select id="iaTom"><option>pessoal e simples</option><option>profissional</option><option>animado e amigável</option></select>
+              <input type="text" id="iaNomeInput" maxlength="40" placeholder="Assinar como (seu nome)" onchange="iaSalvarNome(this.value)">
+              <button class="btn-sec" id="btnIa" onclick="iaGerarEmail()">✨ Gerar rascunho</button>
+            </div>
+            <div class="ia-chips" id="iaAssuntos"></div>
+            <div id="iaMsgEmail"></div>
+          </div>
           <div class="form-field"><label>Assunto</label><input type="text" id="emailAssunto" maxlength="150" placeholder="Ex: Novidades no CloudX, {{nome}}!"></div>
           <div class="form-field"><label>Mensagem</label><textarea id="emailCorpo" rows="9" placeholder="Olá {{nome}},&#10;&#10;Escreva aqui a sua mensagem..."></textarea></div>
           <div class="dica">Use <b>{{nome}}</b> para colocar o primeiro nome da pessoa (sem nome cadastrado, vira "cliente"). Links colados no texto ficam clicáveis. Cada e-mail sai individual, em ritmo lento, sem rastreador, e leva o link para a pessoa se descadastrar.</div>
@@ -561,6 +584,60 @@
       <div class="panel leads-table-wrap">
         <h2>🗂️ Histórico de envios</h2>
         <div id="emailHistorico"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: WHATSAPP ===== -->
+  <div class="tab-content" id="tab-whats">
+    <header>
+      <div>
+        <h1>WhatsApp</h1>
+        <p class="subtitle">Envio manual, um por vez, pelo seu próprio WhatsApp. Nada é enviado automaticamente.</p>
+      </div>
+      <button class="refresh" onclick="carregarWhats()">↻ Atualizar</button>
+    </header>
+
+    <div id="waMsgTopo"></div>
+
+    <div class="panel" id="waSemToken" style="display:none">
+      <h2>🔒 Área protegida</h2>
+      <p class="subtitle" style="margin-bottom:14px">Informe o token de admin (a variável ADMIN_TOKEN da Vercel) para ver os contatos.</p>
+      <button class="btn-add-campanha" onclick="waPedirToken()">Informar token</button>
+    </div>
+
+    <div id="waConteudo" style="display:none">
+      <div class="grid kpis">
+        <div class="card kpi"><div class="label">Contatos com WhatsApp</div><div class="value" id="waTotal">—</div><div class="delta neutro">importados do CSV</div></div>
+        <div class="card kpi"><div class="label">Pendentes</div><div class="value" id="waPend">—</div><div class="delta neutro">ainda não abertos</div></div>
+        <div class="card kpi"><div class="label">Já abertos</div><div class="value" id="waEnv">—</div><div class="delta neutro">marcados como enviados</div></div>
+        <div class="card kpi"><div class="label">Abertos hoje</div><div class="value" id="waHoje" data-n="0">—</div><div class="delta neutro">ideal: parar em 20 por dia</div></div>
+      </div>
+
+      <div class="panel">
+        <h2>💬 Mensagem</h2>
+        <div class="email-form">
+          <div class="ia-box">
+            <div class="ia-titulo">✨ Escrever com IA <span>(rascunho curto para você revisar)</span></div>
+            <div class="form-field"><label>O que você quer comunicar?</label><textarea id="waObjetivo" rows="2" placeholder="Ex: Contar que criei o CloudX e convidar para testar, 15 GB grátis por 6 meses."></textarea></div>
+            <div class="ia-linha">
+              <select id="waTom"><option>pessoal e simples</option><option>profissional</option><option>animado e amigável</option></select>
+              <input type="text" id="waNomeInput" maxlength="40" placeholder="Assinar como (seu nome)" onchange="iaSalvarNome(this.value)">
+              <button class="btn-sec" id="btnWaIa" onclick="waGerarIA()">✨ Gerar mensagem</button>
+            </div>
+            <div id="waMsgIa"></div>
+          </div>
+          <div class="form-field"><label>Mensagem que será pré-preenchida</label><textarea id="waMensagem" rows="5" placeholder="Oi {{nome}}, tudo bem? ..."></textarea></div>
+          <div class="dica"><b>{{nome}}</b> vira o primeiro nome do contato. Ao clicar em <b>Abrir no WhatsApp</b>, a conversa abre com o texto pronto e <b>você aperta enviar</b>; o contato passa a contar como aberto. Mande só para quem você conhece, no máximo uns 20 por dia, e pare se alguém reclamar: mensagem em massa para quem não conhece pode levar o WhatsApp a restringir o seu número.</div>
+        </div>
+      </div>
+
+      <div class="panel leads-table-wrap">
+        <div class="panel-head">
+          <h2>📋 Contatos pendentes</h2>
+          <a class="link-aba" style="color:var(--red)" onclick="waLimpar()">Apagar toda a lista</a>
+        </div>
+        <div id="waLista"></div>
       </div>
     </div>
   </div>
@@ -1306,6 +1383,177 @@
     carregarEmail(true);
   }
 
+  // ── IA (Groq) ──
+  let iaAssuntos = [];
+  function iaNome() { try { return localStorage.getItem('cloudx_ia_nome') || ''; } catch (e) { return ''; } }
+  function iaSalvarNome(v) {
+    try { localStorage.setItem('cloudx_ia_nome', String(v).trim()); } catch (e) {}
+    ['iaNomeInput', 'waNomeInput'].forEach(id => { const el = document.getElementById(id); if (el && el.value !== String(v)) el.value = v; });
+  }
+  ['iaNomeInput', 'waNomeInput'].forEach(id => { const el = document.getElementById(id); if (el) el.value = iaNome(); });
+
+  function iaAviso(id, tipo, texto) {
+    document.getElementById(id).innerHTML = texto ? `<div class="alerta ${tipo}">${tipo === 'ok' ? '✅' : '⚠'} ${esc(texto)}</div>` : '';
+  }
+
+  async function iaGerarEmail() {
+    const objetivo = document.getElementById('iaObjetivo').value;
+    if (objetivo.trim().length < 10) { iaAviso('iaMsgEmail', 'atencao', 'Descreva em uma ou duas frases o que você quer comunicar.'); return; }
+    if (document.getElementById('emailCorpo').value.trim() && !confirm('Já existe um texto na mensagem. Substituir pelo rascunho da IA?')) return;
+    const btn = document.getElementById('btnIa'); btn.disabled = true; btn.textContent = 'Gerando...'; iaAviso('iaMsgEmail', '', '');
+    try {
+      const r = await emailChamar('/ia', { objetivo, tom: document.getElementById('iaTom').value, publico: document.getElementById('emailPublico').value, canal: 'email', nome: iaNome() });
+      if (!r.ok) { iaAviso('iaMsgEmail', 'critico', r.erro || 'A IA não respondeu.'); return; }
+      document.getElementById('emailCorpo').value = r.mensagem;
+      iaAssuntos = r.assuntos || [];
+      if (iaAssuntos[0]) document.getElementById('emailAssunto').value = iaAssuntos[0];
+      document.getElementById('iaAssuntos').innerHTML = iaAssuntos.length > 1
+        ? iaAssuntos.map((a, i) => `<button class="chip-ia" onclick="iaUsarAssunto(${i})">${esc(a)}</button>`).join('') : '';
+      iaAviso('iaMsgEmail', 'ok', 'Rascunho pronto' + (iaAssuntos.length > 1 ? ' (clique em outro assunto para trocar)' : '') + '. Leia, ajuste e use "Enviar teste para mim" antes de enviar.');
+    } catch (e) { iaAviso('iaMsgEmail', 'critico', e.message); }
+    finally { btn.disabled = false; btn.textContent = '✨ Gerar rascunho'; }
+  }
+  function iaUsarAssunto(i) { document.getElementById('emailAssunto').value = iaAssuntos[i] || ''; }
+
+  async function waGerarIA() {
+    const objetivo = document.getElementById('waObjetivo').value;
+    if (objetivo.trim().length < 10) { iaAviso('waMsgIa', 'atencao', 'Descreva em uma ou duas frases o que você quer comunicar.'); return; }
+    if (document.getElementById('waMensagem').value.trim() && !confirm('Já existe uma mensagem. Substituir pelo rascunho da IA?')) return;
+    const btn = document.getElementById('btnWaIa'); btn.disabled = true; btn.textContent = 'Gerando...'; iaAviso('waMsgIa', '', '');
+    try {
+      const r = await emailChamar('/ia', { objetivo, tom: document.getElementById('waTom').value, publico: 'contatos', canal: 'whatsapp', nome: iaNome() });
+      if (!r.ok) { iaAviso('waMsgIa', 'critico', r.erro || 'A IA não respondeu.'); return; }
+      document.getElementById('waMensagem').value = r.mensagem;
+      iaAviso('waMsgIa', 'ok', 'Mensagem pronta. Leia e ajuste antes de abrir as conversas.');
+    } catch (e) { iaAviso('waMsgIa', 'critico', e.message); }
+    finally { btn.disabled = false; btn.textContent = '✨ Gerar mensagem'; }
+  }
+
+  // ── WhatsApp (envio manual, um por vez) ──
+  const WA_LIMITE_DIA = 20;
+  let waContatos = [];
+
+  function waAviso(tipo, texto) {
+    document.getElementById('waMsgTopo').innerHTML = texto ? `<div class="alerta ${tipo}">${tipo === 'ok' ? '✅' : '⚠'} ${esc(texto)}</div>` : '';
+  }
+  function waMostrar(estado) {   // 'token' | 'conteudo' | 'nenhum'
+    document.getElementById('waSemToken').style.display = estado === 'token' ? 'block' : 'none';
+    document.getElementById('waConteudo').style.display = estado === 'conteudo' ? 'block' : 'none';
+  }
+  function waPedirToken() {
+    const t = prompt('Digite o token de admin (variável ADMIN_TOKEN da Vercel):');
+    if (!t) return;
+    salvarToken(t.trim());
+    carregarWhats();
+  }
+
+  async function carregarWhats(manter) {
+    if (manter !== true) waAviso('', '');
+    if (!lerToken()) { waMostrar('token'); return; }
+    try {
+      const r = await emailChamar('/whatsapp/contatos');
+      if (!r.ok) {
+        if (r._http === 401) { salvarToken(''); waMostrar('token'); waAviso('critico', 'Token inválido. Confira o ADMIN_TOKEN da Vercel.'); return; }
+        waMostrar('nenhum'); waAviso('critico', r.erro || 'Não foi possível carregar.'); return;
+      }
+      waMostrar('conteudo');
+      waContatos = r.contatos;
+      setTxt('waTotal', fmtNum(r.resumo.total)); setTxt('waPend', fmtNum(r.resumo.pendentes)); setTxt('waEnv', fmtNum(r.resumo.enviados));
+      const hoje = document.getElementById('waHoje');
+      hoje.textContent = fmtNum(r.resumo.enviadosHoje) + ' / ' + WA_LIMITE_DIA; hoje.dataset.n = r.resumo.enviadosHoje;
+      hoje.style.color = r.resumo.enviadosHoje >= WA_LIMITE_DIA ? 'var(--red)' : '';
+      renderizarWhatsLista();
+    } catch (e) { waAviso('critico', 'Falha ao carregar: ' + e.message); }
+  }
+
+  function renderizarWhatsLista() {
+    const box = document.getElementById('waLista');
+    if (!waContatos.length) { box.innerHTML = '<div class="vazio">Nenhum contato pendente. Importe o CSV na aba E-mail ("Importar contatos"): os telefones também entram aqui.</div>'; return; }
+    box.innerHTML = '<table class="leads-table"><thead><tr><th>Nome</th><th>Telefone</th><th></th></tr></thead><tbody>' + waContatos.map((c, i) =>
+      `<tr><td>${esc(c.nome || '(sem nome)')}</td><td class="lead-data">+${esc(c.telefone)}</td><td style="white-space:nowrap">` +
+      `<button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="waAbrir(${i})">Abrir no WhatsApp</button> &nbsp; ` +
+      `<a class="link-aba" style="color:var(--muted)" onclick="waPular(${i})">não enviar</a></td></tr>`).join('') + '</tbody></table>';
+  }
+
+  function waTexto(modelo, contato) {
+    const primeiro = String(contato.nome || '').trim().split(/\s+/)[0] || '';
+    return modelo.replace(/\{\{\s*nome\s*\}\}/gi, primeiro).replace(/\s+,/g, ',').replace(/ {2,}/g, ' ').trim();
+  }
+
+  async function waAbrir(i) {
+    const c = waContatos[i], modelo = document.getElementById('waMensagem').value;
+    if (!c) return;
+    if (modelo.trim().length < 10) { waAviso('atencao', 'Escreva a mensagem (ou gere com a IA) antes de abrir o WhatsApp.'); return; }
+    const hoje = Number(document.getElementById('waHoje').dataset.n || 0);
+    if (hoje >= WA_LIMITE_DIA && !confirm(`Você já abriu ${hoje} conversas hoje. Para proteger o seu número, o ideal é parar por hoje. Abrir mesmo assim?`)) return;
+    waAviso('', '');
+    window.open('https://wa.me/' + c.telefone + '?text=' + encodeURIComponent(waTexto(modelo, c)), '_blank', 'noopener');
+    waContatos.splice(i, 1); renderizarWhatsLista();
+    try { await emailChamar('/whatsapp/marcar', { telefone: c.telefone, status: 'enviado' }); } catch (e) {}
+    carregarWhats(true);
+  }
+
+  async function waPular(i) {
+    const c = waContatos[i]; if (!c) return;
+    waContatos.splice(i, 1); renderizarWhatsLista();
+    try { await emailChamar('/whatsapp/marcar', { telefone: c.telefone, status: 'nao_enviar' }); } catch (e) {}
+    carregarWhats(true);
+  }
+
+  async function waLimpar() {
+    if (!confirm('Apagar TODA a lista de WhatsApp (pendentes, abertos e "não enviar")?')) return;
+    try { const r = await emailChamar('/whatsapp/limpar', {}); waAviso(r.ok ? 'ok' : 'critico', r.ok ? 'Lista de WhatsApp apagada.' : r.erro); } catch (e) { waAviso('critico', e.message); }
+    carregarWhats(true);
+  }
+  document.querySelector('.nav-item[data-tab="whats"]').addEventListener('click', () => carregarWhats());
+
+  // Telefones do CSV (Google: "Phone 1 - Value"; Outlook: "Mobile Phone" etc.)
+  function extrairTelefones(linhas) {
+    if (linhas.length < 2) return [];
+    const cab = linhas[0].map(h => h.trim().toLowerCase());
+    const colsTel = cab.map((h, i) => (/phone|telefone|celular|mobile/.test(h) && !/label|type|tipo|rótulo/.test(h)) ? i : -1).filter(i => i >= 0);
+    const col = (...nomes) => cab.findIndex(h => nomes.includes(h));
+    const iNome = col('name', 'nome', 'display name'), iPri = col('first name', 'given name', 'nome próprio'), iUlt = col('last name', 'family name', 'sobrenome');
+    const out = [];
+    for (const l of linhas.slice(1)) {
+      const nome = ((iNome >= 0 ? l[iNome] : '') || ((iPri >= 0 ? l[iPri] : '') + ' ' + (iUlt >= 0 ? l[iUlt] : ''))).replace(/\s+/g, ' ').trim();
+      for (const i of colsTel) {
+        String(l[i] || '').split(/\s*(?::::|;)\s*/).forEach(t => { t = t.trim(); if (t) out.push({ telefone: t, nome }); });
+      }
+    }
+    return out;
+  }
+
+  async function emailImportarCsv() {
+    const arq = document.getElementById('emailCsv').files[0];
+    if (!document.getElementById('emailCsvOk').checked) { csvMsg('atencao', 'Marque a confirmação antes de importar.'); return; }
+    if (!arq) { csvMsg('atencao', 'Escolha o arquivo CSV exportado do Google Contatos.'); return; }
+    const btn = document.getElementById('btnCsv'); btn.disabled = true; btn.textContent = 'Importando...';
+    try {
+      const texto = await new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => falha(new Error('Não consegui ler o arquivo.')); r.readAsText(arq, 'utf-8'); });
+      const linhas = lerCsv(texto), contatos = extrairContatos(linhas), telefones = extrairTelefones(linhas);
+      if (!contatos.length && !telefones.length) { csvMsg('atencao', 'Não encontrei e-mails nem telefones nesse arquivo. Exporte como "Google CSV" no Google Contatos.'); return; }
+      const total = { importados: 0, invalidos: 0, duplicados: 0, descadastrados: 0 }, tel = { importados: 0, invalidos: 0, duplicados: 0 };
+      for (let i = 0; i < contatos.length; i += 400) {
+        const r = await emailChamar('/contatos/importar', { contatos: contatos.slice(i, i + 400), confirmou: true });
+        if (!r.ok) { csvMsg('critico', r.erro || 'Erro ao importar.'); return; }
+        Object.keys(total).forEach(k => { total[k] += r[k] || 0; });
+      }
+      let avisoTel = '';
+      for (let i = 0; i < telefones.length; i += 400) {
+        const r = await emailChamar('/whatsapp/importar', { contatos: telefones.slice(i, i + 400), confirmou: true });
+        if (!r.ok) { avisoTel = ' Os telefones não foram importados: ' + (r.erro || 'erro desconhecido'); break; }
+        Object.keys(tel).forEach(k => { tel[k] += r[k] || 0; });
+      }
+      csvMsg(avisoTel ? 'atencao' : 'ok',
+        `${total.importados} e-mails importados (ignorados: ${total.invalidos} inválidos, ${total.duplicados} repetidos, ${total.descadastrados} já descadastrados).` +
+        (telefones.length && !avisoTel ? ` ${tel.importados} telefones na aba WhatsApp (${tel.invalidos} inválidos, ${tel.duplicados} repetidos).` : '') + avisoTel);
+      document.getElementById('emailCsv').value = ''; document.getElementById('emailCsvOk').checked = false;
+      carregarEmail(true);
+    } catch (e) { csvMsg('critico', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Importar contatos'; }
+  }
+
   // ── contatos importados (CSV do Google Contatos) ──
   let emailLimiteContatos = 30;
 
@@ -1355,28 +1603,6 @@
       }
     }
     return out;
-  }
-
-  async function emailImportarCsv() {
-    const arq = document.getElementById('emailCsv').files[0];
-    if (!document.getElementById('emailCsvOk').checked) { csvMsg('atencao', 'Marque a confirmação antes de importar.'); return; }
-    if (!arq) { csvMsg('atencao', 'Escolha o arquivo CSV exportado do Google Contatos.'); return; }
-    const btn = document.getElementById('btnCsv'); btn.disabled = true; btn.textContent = 'Importando...';
-    try {
-      const texto = await new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => falha(new Error('Não consegui ler o arquivo.')); r.readAsText(arq, 'utf-8'); });
-      const contatos = extrairContatos(lerCsv(texto));
-      if (!contatos.length) { csvMsg('atencao', 'Não encontrei e-mails nesse arquivo. Exporte como "Google CSV" no Google Contatos.'); return; }
-      const total = { importados: 0, invalidos: 0, duplicados: 0, descadastrados: 0 };
-      for (let i = 0; i < contatos.length; i += 400) {
-        const r = await emailChamar('/contatos/importar', { contatos: contatos.slice(i, i + 400), confirmou: true });
-        if (!r.ok) { csvMsg('critico', r.erro || 'Erro ao importar.'); return; }
-        Object.keys(total).forEach(k => { total[k] += r[k] || 0; });
-      }
-      csvMsg('ok', `${total.importados} contatos importados. Ignorados: ${total.invalidos} inválidos, ${total.duplicados} repetidos, ${total.descadastrados} já descadastrados.`);
-      document.getElementById('emailCsv').value = ''; document.getElementById('emailCsvOk').checked = false;
-      carregarEmail(true);
-    } catch (e) { csvMsg('critico', e.message); }
-    finally { btn.disabled = false; btn.textContent = 'Importar contatos'; }
   }
 
   async function emailLimparContatos() {
