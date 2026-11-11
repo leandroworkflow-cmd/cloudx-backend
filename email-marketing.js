@@ -579,7 +579,7 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       };
       const [tot, novos, env, nao] = await Promise.all([cont(null), cont('novo'), cont('enviado'), cont('nao_enviar')]);
       if (tot.error) { const e = new Error(MSG_WA_TABELA + ' (' + tot.error.message + ')'); e.pendente = true; throw e; }
-      const { data: pend } = await db.from('whatsapp_contatos').select('telefone, nome').eq('status', 'novo').order('criado_em').limit(100);
+      const { data: pend } = await db.from('whatsapp_contatos').select('telefone, nome').eq('status', 'novo').order('criado_em').limit(500);
       const { count: hoje } = await db.from('whatsapp_contatos').select('telefone', { count: 'exact', head: true })
         .eq('status', 'enviado').gte('enviado_em', inicioHojeISO());
       res.json({

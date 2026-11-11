@@ -615,6 +615,27 @@
       </div>
 
       <div class="panel">
+        <h2>📇 Importar ou adicionar contatos</h2>
+        <div class="email-form">
+          <div class="form-field"><label>Arquivo CSV do Google Contatos (usa os telefones)</label><input type="file" id="waCsv" accept=".csv,text/csv"></div>
+          <div class="form-field"><label>Ou adicione um contato</label>
+            <div class="ia-linha">
+              <input type="text" id="waNovoNome" maxlength="100" placeholder="Nome">
+              <input type="text" id="waNovoTel" maxlength="25" placeholder="Telefone com DDD, ex.: (31) 99999-9999">
+              <button class="btn-sec" onclick="waAdicionar()">Adicionar</button>
+            </div>
+          </div>
+          <label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;cursor:pointer">
+            <input type="checkbox" id="waCsvOk" style="margin-top:3px;flex:none">
+            <span>Confirmo que são pessoas que eu conheço, que vou mandar uma mensagem pessoal e honesta, e que quem pedir para parar será respeitado.</span>
+          </label>
+          <div class="email-botoes"><button class="btn-sec" id="btnWaCsv" onclick="waImportarCsv()">Importar CSV</button></div>
+          <div id="waCsvMsg"></div>
+          <div class="dica"><b>Como exportar:</b> em contacts.google.com, clique em <b>Exportar</b> e escolha <b>Google CSV</b>. Os contatos do seu WhatsApp são os da agenda do celular: se eles estão salvos na conta Google, já vêm nesse arquivo. O painel lê telefone e nome e descarta repetidos e números inválidos. Quem já foi aberto ou marcado como "não enviar" não volta para a lista ao reimportar.</div>
+        </div>
+      </div>
+
+      <div class="panel">
         <h2>💬 Mensagem</h2>
         <div class="email-form">
           <div class="ia-box">
@@ -637,6 +658,8 @@
           <h2>📋 Contatos pendentes</h2>
           <a class="link-aba" style="color:var(--red)" onclick="waLimpar()">Apagar toda a lista</a>
         </div>
+        <input type="text" id="waBusca" placeholder="🔍 Buscar por nome ou número" oninput="renderizarWhatsLista()"
+          style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px">
         <div id="waLista"></div>
       </div>
     </div>
@@ -1468,11 +1491,17 @@
 
   function renderizarWhatsLista() {
     const box = document.getElementById('waLista');
-    if (!waContatos.length) { box.innerHTML = '<div class="vazio">Nenhum contato pendente. Importe o CSV na aba E-mail ("Importar contatos"): os telefones também entram aqui.</div>'; return; }
-    box.innerHTML = '<table class="leads-table"><thead><tr><th>Nome</th><th>Telefone</th><th></th></tr></thead><tbody>' + waContatos.map((c, i) =>
+    const termo = String((document.getElementById('waBusca') || {}).value || '').trim().toLowerCase();
+    const digitos = termo.replace(/\D/g, '');
+    if (!waContatos.length) { box.innerHTML = '<div class="vazio">Nenhum contato pendente. Importe o CSV do Google Contatos ou adicione um número no quadro acima.</div>'; return; }
+    const lista = waContatos.filter(c => !termo || String(c.nome || '').toLowerCase().includes(termo) || (digitos && c.telefone.includes(digitos)));
+    if (!lista.length) { box.innerHTML = '<div class="vazio">Nenhum contato encontrado para essa busca.</div>'; return; }
+    const mostrar = lista.slice(0, 100);
+    box.innerHTML = (lista.length > mostrar.length ? `<div class="dica" style="margin-bottom:10px">Mostrando ${mostrar.length} de ${lista.length}. Use a busca para achar um contato.</div>` : '')
+      + '<table class="leads-table"><thead><tr><th>Nome</th><th>Telefone</th><th></th></tr></thead><tbody>' + mostrar.map(c =>
       `<tr><td>${esc(c.nome || '(sem nome)')}</td><td class="lead-data">+${esc(c.telefone)}</td><td style="white-space:nowrap">` +
-      `<button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="waAbrir(${i})">Abrir no WhatsApp</button> &nbsp; ` +
-      `<a class="link-aba" style="color:var(--muted)" onclick="waPular(${i})">não enviar</a></td></tr>`).join('') + '</tbody></table>';
+      `<button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="waAbrir('${esc(c.telefone)}')">Abrir no WhatsApp</button> &nbsp; ` +
+      `<a class="link-aba" style="color:var(--muted)" onclick="waPular('${esc(c.telefone)}')">não enviar</a></td></tr>`).join('') + '</tbody></table>';
   }
 
   function waTexto(modelo, contato) {
@@ -1480,8 +1509,8 @@
     return modelo.replace(/\{\{\s*nome\s*\}\}/gi, primeiro).replace(/\s+,/g, ',').replace(/ {2,}/g, ' ').trim();
   }
 
-  async function waAbrir(i) {
-    const c = waContatos[i], modelo = document.getElementById('waMensagem').value;
+  async function waAbrir(tel) {
+    const i = waContatos.findIndex(x => x.telefone === tel), c = waContatos[i], modelo = document.getElementById('waMensagem').value;
     if (!c) return;
     if (modelo.trim().length < 10) { waAviso('atencao', 'Escreva a mensagem (ou gere com a IA) antes de abrir o WhatsApp.'); return; }
     const hoje = Number(document.getElementById('waHoje').dataset.n || 0);
@@ -1493,8 +1522,8 @@
     carregarWhats(true);
   }
 
-  async function waPular(i) {
-    const c = waContatos[i]; if (!c) return;
+  async function waPular(tel) {
+    const i = waContatos.findIndex(x => x.telefone === tel), c = waContatos[i]; if (!c) return;
     waContatos.splice(i, 1); renderizarWhatsLista();
     try { await emailChamar('/whatsapp/marcar', { telefone: c.telefone, status: 'nao_enviar' }); } catch (e) {}
     carregarWhats(true);
@@ -1505,6 +1534,47 @@
     try { const r = await emailChamar('/whatsapp/limpar', {}); waAviso(r.ok ? 'ok' : 'critico', r.ok ? 'Lista de WhatsApp apagada.' : r.erro); } catch (e) { waAviso('critico', e.message); }
     carregarWhats(true);
   }
+  // ── importar / adicionar contatos direto na aba WhatsApp ──
+  function waCsvAviso(tipo, texto) {
+    document.getElementById('waCsvMsg').innerHTML = texto ? `<div class="alerta ${tipo}">${tipo === 'ok' ? '✅' : '⚠'} ${esc(texto)}</div>` : '';
+  }
+
+  async function waImportarCsv() {
+    const arq = document.getElementById('waCsv').files[0];
+    if (!document.getElementById('waCsvOk').checked) { waCsvAviso('atencao', 'Marque a confirmação antes de importar.'); return; }
+    if (!arq) { waCsvAviso('atencao', 'Escolha o arquivo CSV exportado do Google Contatos.'); return; }
+    const btn = document.getElementById('btnWaCsv'); btn.disabled = true; btn.textContent = 'Importando...';
+    try {
+      const texto = await new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => falha(new Error('Não consegui ler o arquivo.')); r.readAsText(arq, 'utf-8'); });
+      const telefones = extrairTelefones(lerCsv(texto));
+      if (!telefones.length) { waCsvAviso('atencao', 'Não encontrei telefones nesse arquivo. Exporte como "Google CSV" no Google Contatos (precisa ter a coluna de telefone).'); return; }
+      const tot = { importados: 0, invalidos: 0, duplicados: 0 };
+      for (let i = 0; i < telefones.length; i += 400) {
+        const r = await emailChamar('/whatsapp/importar', { contatos: telefones.slice(i, i + 400), confirmou: true });
+        if (!r.ok) { waCsvAviso('critico', r.erro || 'Erro ao importar.'); return; }
+        Object.keys(tot).forEach(k => { tot[k] += r[k] || 0; });
+      }
+      waCsvAviso('ok', `${tot.importados} telefones importados (${tot.invalidos} inválidos, ${tot.duplicados} repetidos).`);
+      document.getElementById('waCsv').value = ''; document.getElementById('waCsvOk').checked = false;
+      carregarWhats(true);
+    } catch (e) { waCsvAviso('critico', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Importar CSV'; }
+  }
+
+  async function waAdicionar() {
+    const nome = document.getElementById('waNovoNome').value.trim(), tel = document.getElementById('waNovoTel').value.trim();
+    if (!document.getElementById('waCsvOk').checked) { waCsvAviso('atencao', 'Marque a confirmação antes de adicionar.'); return; }
+    if (tel.replace(/\D/g, '').length < 10) { waCsvAviso('atencao', 'Digite o número com DDD, por exemplo (31) 99999-9999.'); return; }
+    try {
+      const r = await emailChamar('/whatsapp/importar', { contatos: [{ telefone: tel, nome }], confirmou: true });
+      if (!r.ok) { waCsvAviso('critico', r.erro || 'Erro ao adicionar.'); return; }
+      if (!r.importados) { waCsvAviso('atencao', 'Esse número não parece válido. Use o DDD e, se for de outro país, o + com o código.'); return; }
+      waCsvAviso('ok', 'Contato adicionado. Se ele já tinha sido aberto ou marcado como "não enviar", continua assim.');
+      document.getElementById('waNovoNome').value = ''; document.getElementById('waNovoTel').value = '';
+      carregarWhats(true);
+    } catch (e) { waCsvAviso('critico', e.message); }
+  }
+
   document.querySelector('.nav-item[data-tab="whats"]').addEventListener('click', () => carregarWhats());
 
   // Telefones do CSV (Google: "Phone 1 - Value"; Outlook: "Mobile Phone" etc.)
