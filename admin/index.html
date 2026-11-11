@@ -378,6 +378,12 @@
       <div id="ultimosBox"></div>
     </div>
 
+    <!-- Clientes por região -->
+    <div class="panel" id="rowRegiaoClientes" style="display:none">
+      <h2>📍 Clientes por região</h2>
+      <div id="regiaoClientesBox"></div>
+    </div>
+
     <footer id="atualizadoEm"></footer>
   </div>
 
@@ -501,6 +507,11 @@
     <div class="panel" style="margin-bottom:14px;">
       <h2>📅 Visitas nos últimos 14 dias</h2>
       <div id="graficoVisitas"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px;">
+      <h2>📍 Visitantes por região (últimos 30 dias)</h2>
+      <div id="regiaoVisitantesBox"></div>
     </div>
 
     <div class="panel">
@@ -943,6 +954,26 @@
     box.innerHTML = `<svg viewBox="0 0 ${svgLargura} ${altura + 30}" style="width:100%;height:200px;overflow:visible;">${barras}</svg>`;
   }
 
+  // Ranking com barras: duas colunas (estados | cidades). Usado em clientes e visitantes.
+  function desenharRegiao(boxId, porEstado, porCidade, rotulo, rodape) {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    if ((!porEstado || !porEstado.length) && (!porCidade || !porCidade.length)) {
+      box.innerHTML = '<div class="vazio">Ainda sem dados de região. Rode o SQL regiao_clientes.sql e aguarde novas visitas/acessos.</div>';
+      return;
+    }
+    const lista = (itens, titulo) => {
+      const max = Math.max(...itens.map(i => i.total), 1);
+      return `<div><div class="label" style="margin-bottom:8px">${titulo}</div>` + itens.map(i => `
+        <div style="margin-bottom:10px">
+          <div class="stat-row" style="padding:0"><span>${esc(i.nome)}</span><span>${fmtNum(i.total)} ${rotulo}</span></div>
+          <div class="barra"><div style="width:${Math.round(i.total / max * 100)}%;background:var(--purple)"></div></div>
+        </div>`).join('') + '</div>';
+    };
+    box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px">
+      ${lista(porEstado || [], 'Por estado')}${lista(porCidade || [], 'Por cidade')}</div>${rodape ? `<div class="delta" style="margin-top:6px">${rodape}</div>` : ''}`;
+  }
+
   function preencherPaginas(paginas) {
     const box = document.getElementById('paginasLista');
     if (!paginas || paginas.length === 0) {
@@ -1213,6 +1244,12 @@
     // Visão geral
     if (resumo && resumo.ok) {
       renderizarResumo(resumo);
+      if (resumo.clientesPorRegiao) {
+        const cr = resumo.clientesPorRegiao;
+        document.getElementById('rowRegiaoClientes').style.display = 'block';
+        desenharRegiao('regiaoClientesBox', cr.porEstado, cr.porCidade, 'clientes',
+          `${fmtNum(cr.comRegiao)} clientes com região identificada · ${fmtNum(cr.semRegiao)} ainda sem região (preenchem no próximo acesso).`);
+      }
       document.getElementById('atualizadoEm').textContent = 'Última atualização: ' + new Date(resumo.geradoEm).toLocaleString('pt-BR');
       status.textContent = 'Dados atualizados';
     } else {
@@ -1243,6 +1280,7 @@
       document.getElementById('analyticsCards').style.display = 'grid';
       desenharGraficoVisitas(analytics.visitasPorDia);
       preencherPaginas(analytics.paginasMaisAcessadas);
+      desenharRegiao('regiaoVisitantesBox', analytics.visitantesPorEstado, analytics.visitantesPorCidade, 'visitantes', 'Localização aproximada pelo IP; visitantes únicos.');
     } else {
       falhas.push('visitas');
     }

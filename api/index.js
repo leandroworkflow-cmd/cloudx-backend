@@ -16,6 +16,29 @@ const getDB = () => createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+
+// ── REGIÃO (cidade/UF/país) a partir dos headers que a Vercel adiciona pelo IP do visitante ──
+// Não guardamos o IP, só a localização aproximada.
+const lerHeader = (req, nome) => {
+  let v = req.headers[nome];
+  if (Array.isArray(v)) v = v[0];
+  if (!v) return null;
+  try { v = decodeURIComponent(String(v)); } catch (e) { v = String(v); }
+  v = v.trim().slice(0, 80);
+  return v || null;
+};
+const regiaoDaRequisicao = (req) => ({
+  cidade: lerHeader(req, 'x-vercel-ip-city'),
+  estado: lerHeader(req, 'x-vercel-ip-country-region'),
+  pais:   lerHeader(req, 'x-vercel-ip-country'),
+});
+// Agrupa uma lista [{cidade, estado}] em ranking {nome, total}
+const rankingPor = (lista, chave, limite = 8) => {
+  const cont = {};
+  lista.forEach(i => { const k = chave(i); if (k) cont[k] = (cont[k] || 0) + 1; });
+  return Object.entries(cont).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total).slice(0, limite);
+};
+
 // ── PLANOS E LIMITES (em bytes) ──
 const PLANOS = {
   free:           1   * 1024 * 1024 * 1024,   // 1 GB (padrão, após expirar a promo)
@@ -70,6 +93,13 @@ async function resolverPlanoAtual(db, perfil) {
 app.get('/api/perfil', auth, async (req, res) => {
   const { data, error } = await req.db.from('perfis').select('*').eq('id', req.user.id).single();
   if (error) return res.status(500).json({ erro: error.message });
+  // Região: preenche no cadastro/1º acesso (e nos clientes antigos, no próximo login)
+  if (!data.cidade && !data.estado) {
+    const reg = regiaoDaRequisicao(req);
+    if (reg.cidade || reg.estado) {
+      try { await getDB().from('perfis').update(reg).eq('id', req.user.id); Object.assign(data, reg); } catch (e) { /* colunas ainda não criadas: ignora */ }
+    }
+  }
   const perfil = await resolverPlanoAtual(req.db, data);
   const limite = PLANOS[perfil.plano] || PLANOS.free;
   res.json({ ...perfil, limite, percentual: Math.round((perfil.storage_usado / limite) * 100) });
@@ -79,6 +109,12 @@ app.get('/api/perfil', auth, async (req, res) => {
 app.post('/api/promo/fundador', auth, async (req, res) => {
   const { data: perfil } = await req.db.from('perfis').select('id, plano').eq('id', req.user.id).single();
   if (!perfil) return res.status(404).json({ erro: 'Perfil não encontrado' });
+
+  // Região do cliente no momento do cadastro
+  const regCad = regiaoDaRequisicao(req);
+  if (regCad.cidade || regCad.estado) {
+    try { await getDB().from('perfis').update(regCad).eq('id', req.user.id); } catch (e) { /* ignora */ }
+  }
 
   // Já tem algum plano definido (não é o primeiro contato) — não reaplica
   if (perfil.plano && perfil.plano !== 'free') {
@@ -422,10 +458,15 @@ app.get('/api/admin/resumo', async (req, res) => {
 
     const [usuarios, perfisRes] = await Promise.all([
       listarTodosUsuarios(db),
-      db.from('perfis').select('id, plano, storage_usado, plano_expira_em'),
+      db.from('perfis').select('id, plano, storage_usado, plano_expira_em, cidade, estado'),
     ]);
-    if (perfisRes.error) throw perfisRes.error;
-    const perfis = perfisRes.data || [];
+    let perfisRegiao = perfisRes;
+    if (perfisRes.error) {
+      // Colunas de região ainda não criadas (regiao_clientes.sql não rodado): busca sem elas
+      perfisRegiao = await db.from('perfis').select('id, plano, storage_usado, plano_expira_em');
+      if (perfisRegiao.error) throw perfisRegiao.error;
+    }
+    const perfis = perfisRegiao.data || [];
     const latenciaMs = Date.now() - t0;
 
     const perfilPorId = new Map(perfis.map(p => [p.id, p]));
@@ -543,9 +584,19 @@ app.get('/api/admin/resumo', async (req, res) => {
         };
       });
 
+    // ── Clientes por região ──
+    const comRegiao = perfis.filter(p => p.cidade || p.estado);
+    const clientesPorRegiao = {
+      comRegiao: comRegiao.length,
+      semRegiao: perfis.length - comRegiao.length,
+      porEstado: rankingPor(comRegiao, p => p.estado),
+      porCidade: rankingPor(comRegiao, p => p.cidade ? (p.estado ? `${p.cidade} - ${p.estado}` : p.cidade) : null, 10),
+    };
+
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       ok: true,
+      clientesPorRegiao,
       geradoEm: new Date(agora).toISOString(),
       saude: { status, latenciaMs, alertas },
       usuarios: { total: totalUsuarios, ativos, inativos },
@@ -723,9 +774,10 @@ app.post('/api/analytics/pageview', async (req, res) => {
   const db = getDB();
   const linha = { visitor_id, pagina: String(pagina).slice(0, 200), referrer: referrer ? String(referrer).slice(0, 300) : null };
 
-  // Guarda o navegador para auditoria (se a coluna user_agent existir); senão grava sem ela
+  // Guarda o navegador para auditoria e a região (se as colunas existirem); senão grava sem elas
   const ua = String(req.headers['user-agent'] || '').slice(0, 300);
-  let { error } = await db.from('page_views').insert({ ...linha, user_agent: ua });
+  let { error } = await db.from('page_views').insert({ ...linha, user_agent: ua, ...regiaoDaRequisicao(req) });
+  if (error) ({ error } = await db.from('page_views').insert({ ...linha, user_agent: ua }));
   if (error) await db.from('page_views').insert(linha);
   await db.from('visitantes_online').upsert({ visitor_id, pagina: linha.pagina, updated_at: new Date().toISOString() });
 
@@ -791,8 +843,23 @@ app.get('/api/analytics/stats', async (req, res) => {
       visitasPorDia.push({ data: chave, visitas: contagemPorDia[chave] || 0 });
     }
 
+    // Visitantes únicos por cidade/estado (últimos 30 dias). Se as colunas não existem, vem vazio.
+    let visitantesPorEstado = [], visitantesPorCidade = [];
+    try {
+      const { data: regData, error: regErro } = await db.from('page_views').select('visitor_id, cidade, estado').gte('created_at', trintaDiasAtras).not('estado', 'is', null);
+      if (!regErro && regData) {
+        const vistos = new Map();
+        regData.forEach(v => { if (!vistos.has(v.visitor_id)) vistos.set(v.visitor_id, v); });
+        const unicos = [...vistos.values()];
+        visitantesPorEstado = rankingPor(unicos, v => v.estado);
+        visitantesPorCidade = rankingPor(unicos, v => v.cidade ? `${v.cidade} - ${v.estado}` : null, 10);
+      }
+    } catch (e) { /* ignora */ }
+
     res.json({
       ok: true,
+      visitantesPorEstado,
+      visitantesPorCidade,
       visitasHoje: visitasHoje || 0,
       visitasTotal: visitasTotal || 0,
       onlineAgora: onlineAgora || 0,
