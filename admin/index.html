@@ -1509,7 +1509,8 @@
 
   // ── WhatsApp (envio manual, um por vez) ──
   const WA_LIMITE_DIA = 20;
-  let waContatos = [];
+  let waContatos = [];   // só pendentes (lista de envio)
+  let waTodos = [];      // todos os status (usado na busca por nome)
 
   function waAviso(tipo, texto) {
     document.getElementById('waMsgTopo').innerHTML = texto ? `<div class="alerta ${tipo}">${tipo === 'ok' ? '✅' : '⚠'} ${esc(texto)}</div>` : '';
@@ -1536,6 +1537,7 @@
       }
       waMostrar('conteudo');
       waContatos = r.contatos;
+      waTodos = r.todos || r.contatos;
       setTxt('waTotal', fmtNum(r.resumo.total)); setTxt('waPend', fmtNum(r.resumo.pendentes)); setTxt('waEnv', fmtNum(r.resumo.enviados));
       const hoje = document.getElementById('waHoje');
       hoje.textContent = fmtNum(r.resumo.enviadosHoje) + ' / ' + WA_LIMITE_DIA; hoje.dataset.n = r.resumo.enviadosHoje;
@@ -1564,21 +1566,24 @@
     const box = document.getElementById('waSug');
     const termo = String(document.getElementById('waNovoNome').value || '').trim().toLowerCase();
     if (termo.length < 2) { box.style.display = 'none'; return; }
-    if (!waContatos.length) { box.innerHTML = '<div class="wa-sug-vazio">Nenhum contato carregado ainda. Importe o CSV primeiro.</div>'; box.style.display = 'block'; return; }
+    if (!waTodos.length) { box.innerHTML = '<div class="wa-sug-vazio">Nenhum contato carregado ainda. Importe o CSV primeiro.</div>'; box.style.display = 'block'; return; }
     const sem = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const t = sem(termo), digitos = termo.replace(/\D/g, '');
-    const achados = waContatos.filter(c => sem(c.nome).includes(t) || (digitos.length >= 3 && c.telefone.includes(digitos)));
-    if (!achados.length) { box.innerHTML = '<div class="wa-sug-vazio">Nenhum contato pendente com esse nome. Se for novo, preencha o telefone e clique em Adicionar.</div>'; box.style.display = 'block'; return; }
-    box.innerHTML = achados.slice(0, 8).map(c =>
-      `<div class="wa-sug-item" onclick="waSelecionar('${esc(c.telefone)}')"><div>${esc(c.nome || '(sem nome)')}<small>+${esc(c.telefone)}</small></div>` +
+    // cada palavra digitada precisa aparecer no nome, em qualquer ordem ("Laís Lage" acha "Laís Fernandes Lage")
+    const palavras = sem(termo).split(/\s+/).filter(Boolean), digitos = termo.replace(/\D/g, '');
+    const achados = waTodos.filter(c => { const n = sem(c.nome); return palavras.every(w => n.includes(w)) || (digitos.length >= 3 && c.telefone.includes(digitos)); });
+    if (!achados.length) { box.innerHTML = '<div class="wa-sug-vazio">Nenhum contato com esse nome. Se for novo, preencha o telefone e clique em Adicionar.</div>'; box.style.display = 'block'; return; }
+    const ROT = { enviado: 'já aberto', nao_enviar: 'não enviar' };
+    const LIM = 40;
+    box.innerHTML = achados.slice(0, LIM).map(c =>
+      `<div class="wa-sug-item" onclick="waSelecionar('${esc(c.telefone)}')"><div>${esc(c.nome || '(sem nome)')}<small>+${esc(c.telefone)}${ROT[c.status] ? ' · ' + ROT[c.status] : ''}</small></div>` +
       `<span style="color:var(--blue);font-size:12px;white-space:nowrap">Selecionar</span></div>`).join('') +
-      (achados.length > 8 ? `<div class="wa-sug-vazio">+${achados.length - 8} resultados. Continue digitando para filtrar.</div>` : '');
+      (achados.length > LIM ? `<div class="wa-sug-vazio">+${achados.length - LIM} resultados. Continue digitando para filtrar.</div>` : '');
     box.style.display = 'block';
   }
   function waFecharSug() { document.getElementById('waSug').style.display = 'none'; }
   let waSel = null;   // contato escolhido na lista
   function waSelecionar(tel) {
-    const c = waContatos.find(x => x.telefone === tel); if (!c) return;
+    const c = waTodos.find(x => x.telefone === tel); if (!c) return;
     waSel = c; waFecharSug();
     document.getElementById('waNovoNome').value = c.nome || '';
     document.getElementById('waNovoTel').value = '';
@@ -1612,14 +1617,17 @@
   }
 
   async function waAbrir(tel) {
-    const i = waContatos.findIndex(x => x.telefone === tel), c = waContatos[i], modelo = document.getElementById('waMensagem').value;
+    const i = waContatos.findIndex(x => x.telefone === tel), c = waContatos[i] || (waSel && waSel.telefone === tel ? waSel : null), modelo = document.getElementById('waMensagem').value;
     if (!c) return;
+    if (i < 0 && waSel && waSel.status === 'nao_enviar' && !confirm('Esse contato está marcado como "não enviar". Abrir mesmo assim?')) return;
+    if (i < 0 && waSel && waSel.status === 'enviado' && !confirm('Esse contato já foi aberto antes. Abrir de novo?')) return;
     if (modelo.trim().length < 10) { waAviso('atencao', 'Escreva a mensagem (ou gere com a IA) antes de abrir o WhatsApp.'); waIrMensagem(); return; }
     const hoje = Number(document.getElementById('waHoje').dataset.n || 0);
     if (hoje >= WA_LIMITE_DIA && !confirm(`Você já abriu ${hoje} conversas hoje. Para proteger o seu número, o ideal é parar por hoje. Abrir mesmo assim?`)) return;
     waAviso('', '');
     window.open('https://wa.me/' + c.telefone + '?text=' + encodeURIComponent(waTexto(modelo, c)), '_blank', 'noopener');
-    waContatos.splice(i, 1); renderizarWhatsLista();
+    if (i >= 0) waContatos.splice(i, 1);
+    renderizarWhatsLista();
     if (waSel && waSel.telefone === c.telefone) { waSel = null; document.getElementById('waNovoNome').value = ''; waRenderSel(); }
     try { await emailChamar('/whatsapp/marcar', { telefone: c.telefone, status: 'enviado' }); } catch (e) {}
     carregarWhats(true);

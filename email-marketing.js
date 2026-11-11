@@ -579,18 +579,21 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
       };
       const [tot, novos, env, nao] = await Promise.all([cont(null), cont('novo'), cont('enviado'), cont('nao_enviar')]);
       if (tot.error) { const e = new Error(MSG_WA_TABELA + ' (' + tot.error.message + ')'); e.pendente = true; throw e; }
-      const pend = [];   // busca em blocos de 1000 (limite do Supabase), ate 5000 contatos
-      for (let ini = 0; ini < 5000; ini += 1000) {
-        const { data: bloco } = await db.from('whatsapp_contatos').select('telefone, nome').eq('status', 'novo')
+      // busca em blocos de 1000 (limite do Supabase), ate 10000 contatos, de TODOS os status
+      // (a busca por nome precisa achar tambem quem ja foi aberto ou marcado como "nao enviar")
+      const todos = [];
+      for (let ini = 0; ini < 10000; ini += 1000) {
+        const { data: bloco } = await db.from('whatsapp_contatos').select('telefone, nome, status')
           .order('criado_em').order('telefone').range(ini, ini + 999);
         if (!bloco || !bloco.length) break;
-        pend.push(...bloco);
+        todos.push(...bloco);
         if (bloco.length < 1000) break;
       }
+      const pend = todos.filter(c => c.status === 'novo').map(c => ({ telefone: c.telefone, nome: c.nome }));
       const { count: hoje } = await db.from('whatsapp_contatos').select('telefone', { count: 'exact', head: true })
         .eq('status', 'enviado').gte('enviado_em', inicioHojeISO());
       res.json({
-        ok: true, contatos: pend || [],
+        ok: true, contatos: pend, todos,
         resumo: { total: tot.count || 0, pendentes: novos.count || 0, enviados: env.count || 0, naoEnviar: nao.count || 0, enviadosHoje: hoje || 0 },
       });
     } catch (e) { res.status(e.pendente ? 409 : 500).json({ ok: false, erro: e.message }); }
