@@ -250,6 +250,13 @@
   .ia-linha { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .ia-linha select, .ia-linha input { padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
   .ia-linha input { min-width: 190px; }
+  .wa-sug-wrap { position: relative; }
+  .wa-sug { position: absolute; top: calc(100% + 4px); left: 0; min-width: 340px; max-width: 90vw; max-height: 320px; overflow-y: auto; z-index: 50;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+  .wa-sug-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .wa-sug-item:last-child { border-bottom: 0; }
+  .wa-sug-item small { color: var(--muted); display: block; font-size: 11px; }
+  .wa-sug-vazio { padding: 12px; color: var(--muted); font-size: 12px; }
   .ia-chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip-ia { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 20px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
   .chip-ia:hover { border-color: var(--purple); }
@@ -620,7 +627,11 @@
           <div class="form-field"><label>Arquivo CSV do Google Contatos (usa os telefones)</label><input type="file" id="waCsv" accept=".csv,text/csv"></div>
           <div class="form-field"><label>Ou adicione um contato</label>
             <div class="ia-linha">
-              <input type="text" id="waNovoNome" maxlength="100" placeholder="Nome">
+              <div class="wa-sug-wrap">
+                <input type="text" id="waNovoNome" maxlength="100" placeholder="Nome (digite para buscar nos contatos)" autocomplete="off"
+                  oninput="waSugerir()" onfocus="waSugerir()" onkeydown="if(event.key==='Escape')waFecharSug()">
+                <div id="waSug" class="wa-sug" style="display:none"></div>
+              </div>
               <input type="text" id="waNovoTel" maxlength="25" placeholder="Telefone com DDD, ex.: (31) 99999-9999">
               <button class="btn-sec" onclick="waAdicionar()">Adicionar</button>
             </div>
@@ -1503,6 +1514,26 @@
       `<button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="waAbrir('${esc(c.telefone)}')">Abrir no WhatsApp</button> &nbsp; ` +
       `<a class="link-aba" style="color:var(--muted)" onclick="waPular('${esc(c.telefone)}')">não enviar</a></td></tr>`).join('') + '</tbody></table>';
   }
+
+  // ── lista suspensa ao digitar o nome ──
+  function waSugerir() {
+    const box = document.getElementById('waSug');
+    const termo = String(document.getElementById('waNovoNome').value || '').trim().toLowerCase();
+    if (termo.length < 2) { box.style.display = 'none'; return; }
+    if (!waContatos.length) { box.innerHTML = '<div class="wa-sug-vazio">Nenhum contato carregado ainda. Importe o CSV primeiro.</div>'; box.style.display = 'block'; return; }
+    const sem = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const t = sem(termo), digitos = termo.replace(/\D/g, '');
+    const achados = waContatos.filter(c => sem(c.nome).includes(t) || (digitos.length >= 3 && c.telefone.includes(digitos)));
+    if (!achados.length) { box.innerHTML = '<div class="wa-sug-vazio">Nenhum contato pendente com esse nome. Se for novo, preencha o telefone e clique em Adicionar.</div>'; box.style.display = 'block'; return; }
+    box.innerHTML = achados.slice(0, 8).map(c =>
+      `<div class="wa-sug-item"><div>${esc(c.nome || '(sem nome)')}<small>+${esc(c.telefone)}</small></div>` +
+      `<button type="button" class="btn-sec" style="padding:6px 10px;font-size:12px;white-space:nowrap" onclick="waAbrirDaBusca('${esc(c.telefone)}')">Abrir no WhatsApp</button></div>`).join('') +
+      (achados.length > 8 ? `<div class="wa-sug-vazio">+${achados.length - 8} resultados. Continue digitando para filtrar.</div>` : '');
+    box.style.display = 'block';
+  }
+  function waFecharSug() { document.getElementById('waSug').style.display = 'none'; }
+  function waAbrirDaBusca(tel) { waFecharSug(); document.getElementById('waNovoNome').value = ''; waAbrir(tel); }
+  document.addEventListener('click', e => { if (!e.target.closest('.wa-sug-wrap')) waFecharSug(); });
 
   function waTexto(modelo, contato) {
     const primeiro = String(contato.nome || '').trim().split(/\s+/)[0] || '';
