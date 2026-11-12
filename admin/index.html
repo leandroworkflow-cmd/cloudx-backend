@@ -499,6 +499,19 @@
       <div id="vencendoBox"></div>
     </div>
 
+    <!-- Exportar -->
+    <div class="panel" id="rowExportar">
+      <h2>⬇️ Exportar dados (CSV)</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px">
+        <button class="btn-sec" type="button" onclick="baixarCsv('clientes', this)">👥 Todos os clientes</button>
+        <button class="btn-sec" type="button" onclick="baixarCsv('sem-arquivo', this)">📭 Quem nunca enviou arquivo</button>
+        <button class="btn-sec" type="button" onclick="baixarCsv('leads', this)">📇 Leads (CRM)</button>
+        <button class="btn-sec" type="button" onclick="baixarCsv('regioes', this)">📍 Clientes e visitantes por região</button>
+      </div>
+      <div class="delta" style="margin-top:10px">Arquivo no formato brasileiro (separador “;”, acentos corretos): abre direto no Excel e no Google Planilhas. Contém e-mails e dados pessoais; guarde com cuidado.</div>
+      <div id="exportarMsg"></div>
+    </div>
+
     <footer id="atualizadoEm"></footer>
   </div>
 
@@ -622,6 +635,11 @@
     <div class="panel" style="margin-bottom:14px;">
       <h2>📅 Visitas nos últimos 14 dias</h2>
       <div id="graficoVisitas"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px;">
+      <h2>📱 Dispositivos (últimos 30 dias)</h2>
+      <div id="dispositivosBox"></div>
     </div>
 
     <div class="panel" style="margin-bottom:14px;">
@@ -1093,6 +1111,39 @@
     };
     box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px">
       ${lista(porEstado || [], 'Por estado')}${lista(porCidade || [], 'Por cidade')}</div>${rodape ? `<div class="delta" style="margin-top:6px">${rodape}</div>` : ''}`;
+  }
+
+  function desenharDispositivos(d) {
+    const box = document.getElementById('dispositivosBox');
+    if (!d || !d.total) { box.innerHTML = '<div class="vazio">Ainda sem dados de dispositivo. Aguarde novas visitas (robôs de busca não entram na conta).</div>'; return; }
+    const coluna = (titulo, itens) => {
+      const max = Math.max(...itens.map(i => i.total), 1);
+      return `<div><div class="label" style="margin-bottom:8px">${titulo}</div>` + itens.map(i => `
+        <div style="margin-bottom:10px">
+          <div class="stat-row" style="padding:0"><span>${esc(i.nome)}</span><span>${fmtNum(i.total)} · ${(i.total / d.total * 100).toFixed(1).replace('.', ',')}%</span></div>
+          <div class="barra"><div style="width:${Math.round(i.total / max * 100)}%;background:var(--purple)"></div></div>
+        </div>`).join('') + '</div>';
+    };
+    box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px">${coluna('Tipo', d.tipo)}${coluna('Sistema', d.sistema)}${coluna('Navegador', d.navegador)}</div>
+      <div class="delta" style="margin-top:6px">${fmtNum(d.total)} visitantes únicos com dispositivo identificado. Robôs de busca e de monitoramento não entram na conta.</div>`;
+  }
+
+  async function baixarCsv(tipo, btn) {
+    const orig = btn.textContent, msg = document.getElementById('exportarMsg');
+    btn.disabled = true; btn.textContent = '⏳ Gerando...'; msg.innerHTML = '';
+    try {
+      const resp = await fetch('https://cloudx-backend.vercel.app/api/admin/exportar/' + tipo, { headers: cab() });
+      if (resp.status === 401) { salvarToken(''); mostrarLogin('Token inválido ou expirado. Entre novamente.'); return; }
+      if (!resp.ok) { const j = await resp.json().catch(() => ({})); throw new Error(j.erro || ('Erro ' + resp.status)); }
+      const blob = await resp.blob();
+      const m = (resp.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'cloudx-' + tipo + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+      msg.innerHTML = '<div class="alerta ok" style="margin-top:10px">✅ Arquivo gerado: ' + esc(a.download) + '</div>';
+    } catch (e) { msg.innerHTML = '<div class="alerta critico" style="margin-top:10px">⚠ ' + esc(e.message) + '</div>'; }
+    finally { btn.disabled = false; btn.textContent = orig; }
   }
 
   function desenharOrigem(lista) {
@@ -1736,6 +1787,7 @@
       desenharGraficoVisitas(analytics.visitasPorDia);
       preencherPaginas(analytics.paginasMaisAcessadas);
       desenharOrigem(analytics.origemTrafego);
+      desenharDispositivos(analytics.dispositivos);
       desenharRegiao('regiaoVisitantesBox', analytics.visitantesPorEstado, analytics.visitantesPorCidade, 'visitantes', 'Localização aproximada pelo IP; visitantes únicos.');
     } else {
       falhas.push('visitas');

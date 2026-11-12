@@ -68,6 +68,31 @@ function classificarOrigem(referrer, utm) {
   return achou ? achou[1] : host;
 }
 
+// ── DISPOSITIVO: tipo, sistema e navegador a partir do user-agent (devolve null para robôs) ──
+function classificarDispositivo(ua) {
+  const u = String(ua || '');
+  if (!u || /bot|crawl|spider|slurp|headless|preview|monitor|lighthouse|curl|wget|python|node-fetch|axios/i.test(u)) return null;
+  const ios = /iPhone|iPod/.test(u), ipad = /iPad/.test(u), android = /Android/i.test(u);
+  let tipo = 'Computador';
+  if (ipad || (android && !/Mobile/i.test(u)) || /Tablet/i.test(u)) tipo = 'Tablet';
+  else if (ios || (android && /Mobile/i.test(u)) || /Mobile|Windows Phone/i.test(u)) tipo = 'Celular';
+  let sistema = 'Outros';
+  if (ios || ipad) sistema = 'iOS';
+  else if (android) sistema = 'Android';
+  else if (/Windows/i.test(u)) sistema = 'Windows';
+  else if (/Macintosh|Mac OS X/i.test(u)) sistema = 'macOS';
+  else if (/CrOS/.test(u)) sistema = 'ChromeOS';
+  else if (/Linux|X11/i.test(u)) sistema = 'Linux';
+  let navegador = 'Outros';
+  if (/Edg(e|A|iOS)?\//.test(u)) navegador = 'Edge';
+  else if (/OPR\/|Opera/.test(u)) navegador = 'Opera';
+  else if (/SamsungBrowser/.test(u)) navegador = 'Samsung Internet';
+  else if (/Firefox\/|FxiOS/.test(u)) navegador = 'Firefox';
+  else if (/CriOS|Chrome\//.test(u)) navegador = 'Chrome';
+  else if (/Safari\//.test(u)) navegador = 'Safari';
+  return { tipo, sistema, navegador };
+}
+
 // Agrupa uma lista [{cidade, estado}] em ranking {nome, total}
 const rankingPor = (lista, chave, limite = 8) => {
   const cont = {};
@@ -532,6 +557,87 @@ app.post('/api/admin/pagamentos/importar-mp', exigirAdminApi, async (req, res) =
     }
     res.json({ ok: true, lidos, gravados, proximoOffset: inicio + PAGINAS * POR_PAGINA, fim });
   } catch (e) { res.status(500).json({ ok: false, erro: 'Falha ao consultar o Mercado Pago: ' + e.message }); }
+});
+
+// ── EXPORTAÇÃO CSV (separador ";" e BOM UTF-8: abre direto no Excel/Planilhas em português, com acentos certos) ──
+const ROTULO_PLANO = { free: 'Gratuito', free_fundador: 'Free Fundador', free_campanha: 'Free Campanha', free_blackfriday: 'Black Friday', basico: 'Básico', essencial: 'Essencial', plus: 'Plus', premium: 'Premium' };
+function celulaCsv(v) {
+  if (v == null) return '';
+  if (typeof v === 'number') return String(v).replace('.', ',');
+  let t = String(v);
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;                 // evita que o Excel execute como fórmula
+  return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+}
+const montarCsv = (cab, linhas) => '\ufeff' + [cab, ...linhas].map(l => l.map(celulaCsv).join(';')).join('\r\n') + '\r\n';
+function dataBR(t) {
+  const ms = typeof t === 'number' ? t : Date.parse(t);
+  if (!ms) return '';
+  const d = new Date(ms - OFFSET_BR).toISOString();            // AAAA-MM-DDTHH:MM (horário de Brasília)
+  return `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} ${d.slice(11, 16)}`;
+}
+async function carregarClientesParaExportar(db) {
+  const [usuarios, perfisRes] = await Promise.all([
+    listarTodosUsuarios(db),
+    db.from('perfis').select('id, plano, storage_usado, plano_expira_em, cidade, estado, pais'),
+  ]);
+  let perfisR = perfisRes;
+  if (perfisRes.error) { perfisR = await db.from('perfis').select('id, plano, storage_usado, plano_expira_em'); if (perfisR.error) throw perfisR.error; }
+  let arq = null;
+  try { const r = await buscarTudo((a, b) => db.rpc('admin_arquivos_por_usuario').range(a, b)); if (!r.error && r.data) arq = new Map(r.data.map(x => [String(x.user_id), x])); } catch (e) { /* função não criada */ }
+  return { usuarios, perfis: perfisR.data || [], arq };
+}
+
+app.get('/api/admin/exportar/:tipo', exigirAdminApi, async (req, res) => {
+  try {
+    const tipo = req.params.tipo, db = getDB(), agora = Date.now();
+    let cab, linhas;
+    if (tipo === 'leads') {
+      const { data, error } = await db.from('leads').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      cab = ['Nome', 'E-mail', 'Telefone', 'Origem', 'Status', 'Score', 'Plano recomendado', 'Mensagem', 'Criado em'];
+      linhas = (data || []).map(l => [l.nome, l.email, l.telefone, l.origem, l.status, l.score, l.plano_recomendado, l.mensagem, dataBR(l.created_at)]);
+    } else if (tipo === 'clientes' || tipo === 'sem-arquivo') {
+      const { usuarios, perfis, arq } = await carregarClientesParaExportar(db);
+      const perfilPorId = new Map(perfis.map(p => [p.id, p]));
+      let lista = usuarios.map(u => {
+        const p = perfilPorId.get(u.id) || {};
+        const plano = p.plano || 'free', exp = p.plano_expira_em ? Date.parse(p.plano_expira_em) : null;
+        const venceu = !!exp && exp < agora;
+        const efetivo = (PLANOS_PAGOS.includes(plano) || PLANOS_PROMO.includes(plano)) && venceu ? 'free' : plano;
+        const usado = p.storage_usado || 0, limite = PLANOS[efetivo] || PLANOS.free;
+        const info = arq ? (arq.get(String(u.id)) || { arquivos: 0 }) : null;
+        const enviou = arq ? Number(info.arquivos) > 0 : usado > 0;
+        return { u, p, efetivo, venceu, usado, limite, qtd: info ? Number(info.arquivos) : null, enviou, cadastro: Date.parse(u.created_at) || 0 };
+      });
+      if (tipo === 'sem-arquivo') lista = lista.filter(c => !c.enviou);
+      lista.sort((a, b) => b.cadastro - a.cadastro);
+      cab = ['E-mail', 'Nome', 'Plano atual', 'Plano contratado', 'Plano vence em', 'Cadastro', 'Último acesso', 'Cidade', 'Estado', 'Enviou arquivo', 'Arquivos', 'Usado (MB)', 'Limite (GB)', 'Uso (%)'];
+      linhas = lista.map(c => [
+        c.u.email, (c.u.user_metadata && (c.u.user_metadata.nome || c.u.user_metadata.full_name || c.u.user_metadata.name)) || '',
+        ROTULO_PLANO[c.efetivo] || c.efetivo, (ROTULO_PLANO[c.p.plano || 'free'] || c.p.plano || '') + (c.venceu ? ' (vencido)' : ''),
+        c.p.plano_expira_em ? dataBR(c.p.plano_expira_em) : '', dataBR(c.u.created_at), c.u.last_sign_in_at ? dataBR(c.u.last_sign_in_at) : 'Nunca',
+        c.p.cidade || '', c.p.estado || '', c.enviou ? 'Sim' : 'Não', c.qtd == null ? '' : c.qtd,
+        Math.round(c.usado / 1048576 * 100) / 100, Math.round(c.limite / 1073741824 * 100) / 100, Math.round(c.usado / c.limite * 1000) / 10,
+      ]);
+    } else if (tipo === 'regioes') {
+      const { perfis } = await carregarClientesParaExportar(db);
+      const noBr = (x) => !x.pais || String(x.pais).toUpperCase() === 'BR';
+      const cont = new Map();
+      const somar = (tipoLinha, estado, cidade) => { const k = [tipoLinha, estado || '', cidade || ''].join('|'); cont.set(k, (cont.get(k) || 0) + 1); };
+      perfis.filter(p => (p.cidade || p.estado) && noBr(p)).forEach(p => somar('Cliente', p.estado, p.cidade));
+      const trinta = new Date(agora - 30 * DIA_MS).toISOString();
+      const rv = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, cidade, estado, pais').gte('created_at', trinta).not('estado', 'is', null).order('id').range(a, b));
+      if (!rv.error && rv.data) { const vistos = new Set(); rv.data.forEach(v => { if (noBr(v) && !vistos.has(v.visitor_id)) { vistos.add(v.visitor_id); somar('Visitante (30 dias)', v.estado, v.cidade); } }); }
+      cab = ['Tipo', 'Estado', 'Cidade', 'Total'];
+      linhas = [...cont.entries()].map(([k, n]) => [...k.split('|'), n]).sort((a, b) => a[0].localeCompare(b[0]) || b[3] - a[3]);
+    } else {
+      return res.status(404).json({ ok: false, erro: 'Tipo de exportação desconhecido.' });
+    }
+    const dia = new Date(agora - OFFSET_BR).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="cloudx-${tipo}-${dia}.csv"`);
+    res.send(montarCsv(cab, linhas));
+  } catch (e) { res.status(500).json({ ok: false, erro: 'Falha ao exportar: ' + e.message }); }
 });
 
 // Usado pela tela de login do painel para conferir o token
@@ -1084,10 +1190,12 @@ app.get('/api/analytics/stats', exigirAdminApi, async (req, res) => {
     } catch (e) { /* ignora */ }
 
     // Origem do tráfego: de onde veio cada visitante único (primeiro contato nos últimos 30 dias)
-    let origemTrafego = [], visitantesUnicos30d = null;
+    let origemTrafego = [], visitantesUnicos30d = null, dispositivos = null;
     try {
-      let r = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, referrer, origem').gte('created_at', trintaDiasAtras).order('id').range(a, b));
-      if (r.error) r = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, referrer').gte('created_at', trintaDiasAtras).order('id').range(a, b));
+      let colunas = 'visitor_id, referrer, origem, user_agent';
+      let r = await buscarTudo((a, b) => db.from('page_views').select(colunas).gte('created_at', trintaDiasAtras).order('id').range(a, b));
+      if (r.error) { colunas = 'visitor_id, referrer, origem'; r = await buscarTudo((a, b) => db.from('page_views').select(colunas).gte('created_at', trintaDiasAtras).order('id').range(a, b)); }
+      if (r.error) { colunas = 'visitor_id, referrer'; r = await buscarTudo((a, b) => db.from('page_views').select(colunas).gte('created_at', trintaDiasAtras).order('id').range(a, b)); }
       if (!r.error && r.data) {
         const porVisitante = new Map();
         r.data.forEach(v => {
@@ -1097,6 +1205,13 @@ app.get('/api/analytics/stats', exigirAdminApi, async (req, res) => {
         });
         origemTrafego = rankingPor([...porVisitante.values()], o => o, 10);
         visitantesUnicos30d = porVisitante.size;
+        if (colunas.includes('user_agent')) {
+          // um dispositivo por visitante (o primeiro user-agent humano visto); robôs ficam de fora
+          const dispPorVisitante = new Map();
+          r.data.forEach(v => { if (!dispPorVisitante.has(v.visitor_id)) { const d = classificarDispositivo(v.user_agent); if (d) dispPorVisitante.set(v.visitor_id, d); } });
+          const lista = [...dispPorVisitante.values()];
+          dispositivos = { total: lista.length, tipo: rankingPor(lista, d => d.tipo, 5), sistema: rankingPor(lista, d => d.sistema, 6), navegador: rankingPor(lista, d => d.navegador, 6) };
+        }
       }
     } catch (e) { /* ignora */ }
 
@@ -1106,6 +1221,7 @@ app.get('/api/analytics/stats', exigirAdminApi, async (req, res) => {
       visitantesPorCidade,
       origemTrafego,
       visitantesUnicos30d,
+      dispositivos,
       visitasHoje: visitasHoje || 0,
       visitasTotal: visitasTotal || 0,
       onlineAgora: onlineAgora || 0,
