@@ -1064,16 +1064,28 @@
       miniCard('Ativação (últimos 30 dias)', a.coorte30.taxa + '%', `${fmtNum(a.coorte30.ativados)} de ${fmtNum(a.coorte30.total)} cadastros novos`),
       miniCard('Nunca enviaram', fmtNum(a.nuncaEnviaram.total), 'cadastrados há mais de 1 dia'),
     ].join('');
-    const lista = a.nuncaEnviaram.lista || [];
+    const lista = a.nuncaEnviaram.lista || [], enviaram = a.enviaram || [];
     emailsPorLista.ativacao = lista.map(c => c.email).filter(e => e.includes('@'));
     const box = document.getElementById('ativacaoBox');
-    if (!lista.length) { box.innerHTML = '<div class="vazio">Todos os clientes cadastrados já enviaram arquivos. 🎉</div>'; return; }
     const assunto = encodeURIComponent('Falta pouco para usar seu espaço no CloudX');
     const corpo = encodeURIComponent('Olá! Vi que você criou sua conta no CloudX mas ainda não enviou nenhum arquivo. É rápido: entre, clique em enviar e arraste o que quiser guardar. Se tiver qualquer dúvida, é só responder este e-mail.');
-    box.innerHTML = `<table class="leads-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Cadastro</th><th></th></tr></thead><tbody>` +
+    const mailto = (e) => e.includes('@') ? `<a class="link-aba" href="mailto:${esc(e)}?subject=${assunto}&body=${corpo}">✉ Enviar e-mail</a>` : '';
+    const nao = !lista.length ? '<div class="vazio">Todos os clientes cadastrados já enviaram arquivos. 🎉</div>' :
+      `<div class="label" style="margin-bottom:8px;color:var(--red)">❌ NÃO ENVIARAM NENHUM ARQUIVO (${fmtNum(a.nuncaEnviaram.total)})</div>
+       <table class="leads-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Cadastro</th><th>Situação</th><th></th></tr></thead><tbody>` +
       lista.map(c => `<tr><td>${esc(c.email)}</td><td>${esc(NOMES_PLANO[c.plano] || c.plano)}</td><td class="lead-data">há ${c.dias} dia${c.dias === 1 ? '' : 's'}</td>` +
-        `<td>${c.email.includes('@') ? `<a class="link-aba" href="mailto:${esc(c.email)}?subject=${assunto}&body=${corpo}">✉ Enviar e-mail</a>` : ''}</td></tr>`).join('') +
-      `</tbody></table>` + (a.nuncaEnviaram.total > lista.length ? `<div class="dica" style="margin-top:10px">Mostrando os ${lista.length} cadastros mais recentes de ${fmtNum(a.nuncaEnviaram.total)}.</div>` : '');
+        `<td><span class="badge inativo">0 arquivos</span></td><td>${mailto(c.email)}</td></tr>`).join('') + `</tbody></table>` +
+      (a.nuncaEnviaram.total > lista.length ? `<div class="dica" style="margin-top:10px">Mostrando ${lista.length} de ${fmtNum(a.nuncaEnviaram.total)}.</div>` : '');
+    const sim = !enviaram.length ? '' :
+      `<div style="margin-top:16px"><a class="link-aba" onclick="document.getElementById('ativacaoEnviaram').style.display = document.getElementById('ativacaoEnviaram').style.display === 'none' ? 'block' : 'none'">▾ Ver quem já enviou (${fmtNum(enviaram.length)})</a></div>
+       <div id="ativacaoEnviaram" style="display:none;margin-top:8px"><div class="label" style="margin-bottom:8px;color:var(--green, #22c55e)">✅ JÁ ENVIARAM ARQUIVOS</div>
+       <table class="leads-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Arquivos</th><th>Último envio</th></tr></thead><tbody>` +
+      enviaram.map(c => `<tr><td>${esc(c.email)}</td><td>${esc(NOMES_PLANO[c.plano] || c.plano)}</td>` +
+        `<td><span class="badge ativo">${c.arquivos == null ? '' : fmtNum(c.arquivos) + ' arquivo' + (c.arquivos === 1 ? '' : 's') + ' · '}${fmtBytes(c.bytes)}</span></td>` +
+        `<td class="lead-data">${c.ultimoEnvio ? formatarData(c.ultimoEnvio) : '—'}</td></tr>`).join('') + `</tbody></table></div>`;
+    const aviso = a.fonte === 'arquivos' ? '' :
+      `<div class="alerta atencao" style="margin-top:12px">⚠ Contagem aproximada (pelo armazenamento usado, que não diminui quando o cliente apaga arquivos). Para ver os arquivos reais de cada cliente, rode <b>admin_arquivos_por_usuario.sql</b> no Supabase.</div>`;
+    box.innerHTML = nao + sim + aviso;
   }
 
   function desenharBlackFriday(b) {

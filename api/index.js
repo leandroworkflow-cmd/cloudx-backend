@@ -643,7 +643,14 @@ app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
 
     // ── Ativação, Black Friday e promoções vencendo ──
     const criadoPorId = new Map(usuarios.map(u => [u.id, Date.parse(u.created_at) || 0]));
-    const enviouArquivo = (p) => (p.storage_usado || 0) > 0;
+    // Fonte da verdade: arquivos reais no Storage (admin_arquivos_por_usuario.sql). Sem a função, usa o armazenamento usado.
+    let arquivosPorUsuario = null;
+    try {
+      const r = await buscarTudo((a, b) => db.rpc('admin_arquivos_por_usuario').range(a, b));
+      if (!r.error && r.data) arquivosPorUsuario = new Map(r.data.map(x => [String(x.user_id), x]));
+    } catch (e) { /* função ainda não criada */ }
+    const infoArq = (p) => arquivosPorUsuario ? (arquivosPorUsuario.get(String(p.id)) || { arquivos: 0, bytes: 0, ultimo_envio: null }) : { arquivos: (p.storage_usado || 0) > 0 ? null : 0, bytes: p.storage_usado || 0, ultimo_envio: null };
+    const enviouArquivo = (p) => arquivosPorUsuario ? Number(infoArq(p).arquivos) > 0 : (p.storage_usado || 0) > 0;
     const pct1 = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
     const pagoAtivo = (p) => { const ex = p.plano_expira_em ? Date.parse(p.plano_expira_em) : null; return PLANOS_PAGOS.includes(p.plano) && !(ex && ex < agora); };
     const emailDe = (id) => emailPorId.get(id) || '—';
@@ -655,12 +662,15 @@ app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
       .filter(p => !enviouArquivo(p) && criadoPorId.get(p.id) && agora - criadoPorId.get(p.id) >= DIA_MS)   // dá 1 dia de chance antes de cobrar
       .sort((a, b) => criadoPorId.get(b.id) - criadoPorId.get(a.id));
     const ativacao = {
+      fonte: arquivosPorUsuario ? 'arquivos' : 'cota',
       cadastros: perfis.length, ativados, taxa: pct1(ativados, perfis.length),
       coorte30: { total: coorte30.length, ativados: coorte30.filter(enviouArquivo).length, taxa: pct1(coorte30.filter(enviouArquivo).length, coorte30.length) },
       nuncaEnviaram: {
         total: semArquivo.length,
-        lista: semArquivo.slice(0, 15).map(p => ({ email: emailDe(p.id), plano: p.plano || 'free', criadoEm: new Date(criadoPorId.get(p.id)).toISOString(), dias: Math.floor((agora - criadoPorId.get(p.id)) / DIA_MS) })),
+        lista: semArquivo.slice(0, 50).map(p => ({ email: emailDe(p.id), plano: p.plano || 'free', criadoEm: new Date(criadoPorId.get(p.id)).toISOString(), dias: Math.floor((agora - criadoPorId.get(p.id)) / DIA_MS) })),
       },
+      enviaram: perfis.filter(enviouArquivo).map(p => { const i = infoArq(p); return { email: emailDe(p.id), plano: p.plano || 'free', arquivos: i.arquivos == null ? null : Number(i.arquivos), bytes: Number(i.bytes) || 0, ultimoEnvio: i.ultimo_envio || null }; })
+        .sort((a, b) => Date.parse(b.ultimoEnvio || 0) - Date.parse(a.ultimoEnvio || 0)).slice(0, 50),
     };
 
     // Black Friday: início = PROMO_CAMPANHA_INICIO (opcional) ou o cadastro mais antigo com o plano da campanha
