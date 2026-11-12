@@ -554,7 +554,7 @@ app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
 
     const [usuarios, perfisRes] = await Promise.all([
       listarTodosUsuarios(db),
-      db.from('perfis').select('id, plano, storage_usado, plano_expira_em, cidade, estado'),
+      db.from('perfis').select('id, plano, storage_usado, plano_expira_em, cidade, estado, pais'),
     ]);
     let perfisRegiao = perfisRes;
     if (perfisRes.error) {
@@ -798,11 +798,15 @@ app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
     } catch (e) { /* tabela ainda não criada */ }
 
     // ── Clientes por região ──
-    const comRegiao = perfis.filter(p => p.cidade || p.estado);
+    // Só Brasil entra nos rankings (siglas como PA e AL também existem em outros países)
+    const noBrasil = (p) => !p.pais || String(p.pais).toUpperCase() === 'BR';
+    const comRegiaoTodas = perfis.filter(p => p.cidade || p.estado);
+    const comRegiao = comRegiaoTodas.filter(noBrasil);
     const clientesPorRegiao = {
       comRegiao: comRegiao.length,
-      semRegiao: perfis.length - comRegiao.length,
-      porEstado: rankingPor(comRegiao, p => p.estado),
+      foraDoBrasil: comRegiaoTodas.length - comRegiao.length,
+      semRegiao: perfis.length - comRegiaoTodas.length,
+      porEstado: rankingPor(comRegiao, p => p.estado, 30),
       porCidade: rankingPor(comRegiao, p => p.cidade ? (p.estado ? `${p.cidade} - ${p.estado}` : p.cidade) : null, 10),
     };
 
@@ -1069,12 +1073,12 @@ app.get('/api/analytics/stats', exigirAdminApi, async (req, res) => {
     // Visitantes únicos por cidade/estado (últimos 30 dias). Se as colunas não existem, vem vazio.
     let visitantesPorEstado = [], visitantesPorCidade = [];
     try {
-      const { data: regData, error: regErro } = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, cidade, estado').gte('created_at', trintaDiasAtras).not('estado', 'is', null).order('id').range(a, b));
+      const { data: regData, error: regErro } = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, cidade, estado, pais').gte('created_at', trintaDiasAtras).not('estado', 'is', null).order('id').range(a, b));
       if (!regErro && regData) {
         const vistos = new Map();
-        regData.forEach(v => { if (!vistos.has(v.visitor_id)) vistos.set(v.visitor_id, v); });
+        regData.forEach(v => { if ((!v.pais || String(v.pais).toUpperCase() === 'BR') && !vistos.has(v.visitor_id)) vistos.set(v.visitor_id, v); });
         const unicos = [...vistos.values()];
-        visitantesPorEstado = rankingPor(unicos, v => v.estado);
+        visitantesPorEstado = rankingPor(unicos, v => v.estado, 30);
         visitantesPorCidade = rankingPor(unicos, v => v.cidade ? `${v.cidade} - ${v.estado}` : null, 10);
       }
     } catch (e) { /* ignora */ }

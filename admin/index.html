@@ -46,6 +46,12 @@
   #emailIndividual textarea { min-height: 150px; resize: vertical; line-height: 1.5; }
   #emailIndividual .acoes { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
   #emailIndividual .dica { margin-top: 10px; }
+  .mapa-abas { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .mapa-abas button { background: transparent; color: var(--muted); border: 0; padding: 7px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .mapa-abas button.ativa { background: var(--purple); color: #fff; font-weight: 600; }
+  #mapaSvg .uf { cursor: default; }
+  #mapaSvg .uf:hover rect, #mapaSvg .uf:focus rect { stroke: var(--text); stroke-width: 2; }
+  .mapa-legenda { height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgba(59,130,246,.2), rgba(59,130,246,1)); margin: 6px 0 2px; }
   #loginErro { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 18px; }
   .sidebar {
     width: 220px;
@@ -418,6 +424,21 @@
         <a class="link-aba" id="btnEmails" style="display:none"></a>
       </div>
       <div id="ultimosBox"></div>
+    </div>
+
+    <!-- Mapa de calor -->
+    <div class="panel" id="rowMapa" style="display:none">
+      <div class="panel-head">
+        <h2>🗺️ Mapa de calor do Brasil</h2>
+        <div class="mapa-abas" role="tablist">
+          <button type="button" id="mapaBtnClientes" class="ativa" onclick="mapaModo('clientes')">Clientes</button>
+          <button type="button" id="mapaBtnVisitantes" onclick="mapaModo('visitantes')">Visitantes (30 dias)</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;align-items:start">
+        <div id="mapaSvgBox"></div>
+        <div id="mapaLateral"></div>
+      </div>
     </div>
 
     <!-- Clientes por região -->
@@ -1062,6 +1083,7 @@
       return;
     }
     const lista = (itens, titulo) => {
+      itens = itens.slice(0, 10);
       const max = Math.max(...itens.map(i => i.total), 1);
       return `<div><div class="label" style="margin-bottom:8px">${titulo}</div>` + itens.map(i => `
         <div style="margin-bottom:10px">
@@ -1123,6 +1145,57 @@
     } catch (e) { msg.innerHTML = `<div class="alerta critico">⚠ ${esc(e.message)}</div>`; btn.disabled = false; btn.textContent = 'Enviar'; }
   }
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && eiAtual) fecharEmailIndividual(); });
+
+  // ── Mapa de calor: um bloco por estado, na posição aproximada do mapa (coluna, linha, nome) ──
+  const MAPA_UF = {
+    RR: [2, 0, 'Roraima'], AP: [4, 0, 'Amapá'],
+    AM: [1, 1, 'Amazonas'], PA: [3, 1, 'Pará'], MA: [5, 1, 'Maranhão'], CE: [6, 1, 'Ceará'], RN: [7, 1, 'Rio Grande do Norte'],
+    AC: [0, 2, 'Acre'], RO: [1, 2, 'Rondônia'], MT: [2, 2, 'Mato Grosso'], TO: [4, 2, 'Tocantins'], PI: [5, 2, 'Piauí'], PB: [7, 2, 'Paraíba'],
+    MS: [2, 3, 'Mato Grosso do Sul'], GO: [3, 3, 'Goiás'], DF: [4, 3, 'Distrito Federal'], BA: [5, 3, 'Bahia'], PE: [7, 3, 'Pernambuco'],
+    SP: [3, 4, 'São Paulo'], MG: [4, 4, 'Minas Gerais'], ES: [5, 4, 'Espírito Santo'], SE: [6, 4, 'Sergipe'], AL: [7, 4, 'Alagoas'],
+    PR: [3, 5, 'Paraná'], RJ: [4, 5, 'Rio de Janeiro'], SC: [3, 6, 'Santa Catarina'], RS: [3, 7, 'Rio Grande do Sul'],
+  };
+  const mapaDados = { clientes: [], visitantes: [] };
+  let mapaAtual = 'clientes';
+  function mapaModo(m) {
+    mapaAtual = m;
+    document.getElementById('mapaBtnClientes').classList.toggle('ativa', m === 'clientes');
+    document.getElementById('mapaBtnVisitantes').classList.toggle('ativa', m === 'visitantes');
+    desenharMapa();
+  }
+  function desenharMapa() {
+    const row = document.getElementById('rowMapa');
+    row.style.display = 'block';
+    const rot = mapaAtual === 'clientes' ? 'cliente' : 'visitante';
+    const valores = {};
+    (mapaDados[mapaAtual] || []).forEach(i => { if (MAPA_UF[i.nome]) valores[i.nome] = i.total; });
+    const lista = Object.entries(valores).sort((a, b) => b[1] - a[1]);
+    const total = lista.reduce((a, [, v]) => a + v, 0), max = Math.max(...Object.values(valores), 0);
+    const T = 62, G = 8, P = T + G;
+    const tiles = Object.entries(MAPA_UF).map(([uf, [c, l, nome]]) => {
+      const v = valores[uf] || 0, t = max > 0 ? Math.sqrt(v / max) : 0;   // raiz: estados pequenos ainda aparecem
+      const fill = v > 0 ? `rgba(59,130,246,${(0.22 + 0.78 * t).toFixed(2)})` : 'rgba(148,163,184,.10)';
+      const corTxt = t > 0.55 ? '#fff' : 'var(--text)';
+      const x = c * P, y = l * P;
+      return `<g class="uf" tabindex="0"><title>${nome} (${uf}): ${v} ${rot}${v === 1 ? '' : 's'}${total ? ' · ' + (v / total * 100).toFixed(1).replace('.', ',') + '%' : ''}</title>
+        <rect x="${x}" y="${y}" width="${T}" height="${T}" rx="10" fill="${fill}" stroke="var(--border)"/>
+        <text x="${x + T / 2}" y="${y + (v > 0 ? 28 : 36)}" text-anchor="middle" font-size="16" font-weight="700" fill="${v > 0 ? corTxt : 'var(--muted)'}">${uf}</text>
+        ${v > 0 ? `<text x="${x + T / 2}" y="${y + 48}" text-anchor="middle" font-size="13" fill="${corTxt}">${fmtNum(v)}</text>` : ''}</g>`;
+    }).join('');
+    const W = 8 * P - G;
+    document.getElementById('mapaSvgBox').innerHTML = `<svg id="mapaSvg" viewBox="0 0 ${W} ${W}" role="img" aria-label="Mapa de calor do Brasil por estado" style="width:100%;max-width:520px;display:block;margin:0 auto">${tiles}</svg>`;
+    const lat = document.getElementById('mapaLateral');
+    if (!lista.length) {
+      lat.innerHTML = `<div class="vazio">Ainda sem ${rot}s com estado identificado. ${mapaAtual === 'clientes' ? 'Os clientes são localizados no próximo login.' : 'Aguarde novas visitas.'}</div>`;
+      return;
+    }
+    lat.innerHTML = `<div class="label" style="margin-bottom:8px">Mais ${rot}s por estado</div>` +
+      lista.slice(0, 6).map(([uf, v]) => `<div style="margin-bottom:10px"><div class="stat-row" style="padding:0"><span>${MAPA_UF[uf][2]} (${uf})</span><span>${fmtNum(v)} · ${(v / total * 100).toFixed(1).replace('.', ',')}%</span></div>
+        <div class="barra"><div style="width:${Math.round(v / max * 100)}%;background:var(--purple)"></div></div></div>`).join('') +
+      `<div class="delta" style="margin-top:14px">Cor mais forte = mais ${rot}s</div><div class="mapa-legenda"></div>
+       <div class="stat-row" style="padding:0;font-size:11px;color:var(--muted)"><span>0</span><span>${fmtNum(max)}</span></div>
+       <div class="delta" style="margin-top:12px">${fmtNum(lista.length)} de 27 estados com ${rot}s · ${fmtNum(total)} no total. ${mapaAtual === 'clientes' ? 'Só clientes cujo estado já foi identificado entram no mapa.' : 'Localização aproximada pelo IP; só Brasil.'}</div>`;
+  }
 
   const MESES_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
   const reais = (n) => 'R$ ' + Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1598,6 +1671,11 @@
     ]);
 
     const falhas = [];
+    try {
+      mapaDados.clientes = (resumo && resumo.ok && resumo.clientesPorRegiao && resumo.clientesPorRegiao.porEstado) || [];
+      mapaDados.visitantes = (analytics && analytics.ok && analytics.visitantesPorEstado) || [];
+      desenharMapa();
+    } catch (e) { /* ignora */ }
     try { desenharFunil(analytics && analytics.ok ? analytics : null, resumo && resumo.ok ? resumo.funil : null); desenharReceita(resumo && resumo.ok ? resumo.historicoReceita : null); } catch (e) { /* ignora */ }
 
     // Visão geral
@@ -1611,7 +1689,7 @@
         const cr = resumo.clientesPorRegiao;
         document.getElementById('rowRegiaoClientes').style.display = 'block';
         desenharRegiao('regiaoClientesBox', cr.porEstado, cr.porCidade, 'clientes',
-          `${fmtNum(cr.comRegiao)} clientes com região identificada · ${fmtNum(cr.semRegiao)} ainda sem região (preenchem no próximo acesso).`);
+          `${fmtNum(cr.comRegiao)} clientes com região identificada${cr.foraDoBrasil ? ' · ' + fmtNum(cr.foraDoBrasil) + ' fora do Brasil' : ''} · ${fmtNum(cr.semRegiao)} ainda sem região (preenchem no próximo acesso).`);
       }
       document.getElementById('atualizadoEm').textContent = 'Última atualização: ' + new Date(resumo.geradoEm).toLocaleString('pt-BR');
       status.textContent = 'Dados atualizados';
