@@ -641,6 +641,64 @@ app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
         };
       });
 
+    // ── Ativação, Black Friday e promoções vencendo ──
+    const criadoPorId = new Map(usuarios.map(u => [u.id, Date.parse(u.created_at) || 0]));
+    const enviouArquivo = (p) => (p.storage_usado || 0) > 0;
+    const pct1 = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+    const pagoAtivo = (p) => { const ex = p.plano_expira_em ? Date.parse(p.plano_expira_em) : null; return PLANOS_PAGOS.includes(p.plano) && !(ex && ex < agora); };
+    const emailDe = (id) => emailPorId.get(id) || '—';
+
+    // Ativação: cadastrou e chegou a enviar pelo menos um arquivo (uso de armazenamento > 0)
+    const ativados = perfis.filter(enviouArquivo).length;
+    const coorte30 = perfis.filter(p => criadoPorId.get(p.id) && agora - criadoPorId.get(p.id) <= 30 * DIA_MS);
+    const semArquivo = perfis
+      .filter(p => !enviouArquivo(p) && criadoPorId.get(p.id) && agora - criadoPorId.get(p.id) >= DIA_MS)   // dá 1 dia de chance antes de cobrar
+      .sort((a, b) => criadoPorId.get(b.id) - criadoPorId.get(a.id));
+    const ativacao = {
+      cadastros: perfis.length, ativados, taxa: pct1(ativados, perfis.length),
+      coorte30: { total: coorte30.length, ativados: coorte30.filter(enviouArquivo).length, taxa: pct1(coorte30.filter(enviouArquivo).length, coorte30.length) },
+      nuncaEnviaram: {
+        total: semArquivo.length,
+        lista: semArquivo.slice(0, 15).map(p => ({ email: emailDe(p.id), plano: p.plano || 'free', criadoEm: new Date(criadoPorId.get(p.id)).toISOString(), dias: Math.floor((agora - criadoPorId.get(p.id)) / DIA_MS) })),
+      },
+    };
+
+    // Black Friday: início = PROMO_CAMPANHA_INICIO (opcional) ou o cadastro mais antigo com o plano da campanha
+    const perfisBF = perfis.filter(p => p.plano === 'free_blackfriday');
+    let inicioBF = process.env.PROMO_CAMPANHA_INICIO ? Date.parse(process.env.PROMO_CAMPANHA_INICIO) : NaN;
+    if (!inicioBF) { const ds = perfisBF.map(p => criadoPorId.get(p.id)).filter(Boolean); inicioBF = ds.length ? Math.min(...ds) : null; }
+    let blackFriday = null;
+    if (inicioBF) {
+      const cadastrosBF = perfis.filter(p => (criadoPorId.get(p.id) || 0) >= inicioBF);
+      const convertidos = cadastrosBF.filter(pagoAtivo);
+      const ativa = campanhaAtiva();
+      blackFriday = {
+        ativa, inicioEm: new Date(inicioBF).toISOString(), fimEm: CAMPANHA_FIM.toISOString(),
+        diasRestantes: ativa ? Math.max(0, Math.ceil((CAMPANHA_FIM.getTime() - agora) / DIA_MS)) : 0,
+        cadastros: cadastrosBF.length,
+        comPlano: perfisBF.length,
+        ativaram: perfisBF.filter(enviouArquivo).length,
+        usadoBytes: perfisBF.reduce((a, p) => a + (p.storage_usado || 0), 0),
+        alocadoBytes: perfisBF.length * PLANOS.free_blackfriday,
+        convertidos: convertidos.length,
+        mrrConvertidos: Math.round(convertidos.reduce((a, p) => a + (PRECOS_MRR[p.plano] || 0), 0) * 100) / 100,
+        taxaConversao: pct1(convertidos.length, cadastrosBF.length),
+      };
+    }
+
+    // Promoções que vencem nos próximos 30 dias = oportunidade de venda
+    const vencendo = perfis
+      .filter(p => PLANOS_PROMO.includes(p.plano) && p.plano_expira_em && Date.parse(p.plano_expira_em) > agora && Date.parse(p.plano_expira_em) - agora <= 30 * DIA_MS)
+      .sort((a, b) => Date.parse(a.plano_expira_em) - Date.parse(b.plano_expira_em));
+    const promocoesVencendo = {
+      total: vencendo.length,
+      lista: vencendo.slice(0, 15).map(p => ({
+        email: emailDe(p.id), plano: p.plano, expiraEm: p.plano_expira_em,
+        dias: Math.ceil((Date.parse(p.plano_expira_em) - agora) / DIA_MS),
+        percentual: Math.round(((p.storage_usado || 0) / (PLANOS[p.plano] || PLANOS.free)) * 100),
+      })),
+    };
+
     // ── Clientes por região ──
     const comRegiao = perfis.filter(p => p.cidade || p.estado);
     const clientesPorRegiao = {
@@ -654,6 +712,7 @@ app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
     res.json({
       ok: true,
       clientesPorRegiao,
+      ativacao, blackFriday, promocoesVencendo,
       proximosLimite: { total: candidatosUpgrade.length, lista: proximosLimite },
       geradoEm: new Date(agora).toISOString(),
       saude: { status, latenciaMs, alertas },
