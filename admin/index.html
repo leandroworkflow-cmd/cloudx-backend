@@ -435,6 +435,23 @@
       <div id="limiteBox"></div>
     </div>
 
+    <!-- Funil -->
+    <div class="panel" id="rowFunil" style="display:none">
+      <h2>🔻 Funil de conversão (últimos 30 dias)</h2>
+      <div id="funilBox"></div>
+    </div>
+
+    <!-- Receita -->
+    <div class="panel" id="rowReceita" style="display:none">
+      <div class="panel-head">
+        <h2>💰 Receita (histórico de pagamentos)</h2>
+        <a class="link-aba" id="btnImportarMP" onclick="importarMP()">↻ Importar do Mercado Pago</a>
+      </div>
+      <div id="receitaMsg"></div>
+      <div class="mini-grid" id="receitaMini"></div>
+      <div id="receitaMeses" style="margin-top:16px"></div>
+    </div>
+
     <!-- Ativação -->
     <div class="panel leads-table-wrap" id="rowAtivacao" style="display:none">
       <div class="panel-head">
@@ -1107,6 +1124,78 @@
   }
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && eiAtual) fecharEmailIndividual(); });
 
+  const MESES_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const reais = (n) => 'R$ ' + Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function desenharFunil(analytics, f) {
+    const row = document.getElementById('rowFunil'), box = document.getElementById('funilBox');
+    if (!f) { row.style.display = 'none'; return; }
+    row.style.display = 'block';
+    const etapas = [];
+    if (analytics && analytics.visitantesUnicos30d != null) etapas.push({ rot: 'Visitantes únicos', n: analytics.visitantesUnicos30d });
+    etapas.push({ rot: 'Cadastraram', n: f.cadastros }, { rot: 'Enviaram um arquivo', n: f.ativaram }, { rot: 'Viraram pagantes', n: f.pagaram });
+    const topo = Math.max(etapas[0].n, 1);
+    let pior = null;
+    etapas.forEach((e, i) => { if (i > 0 && etapas[i - 1].n > 0) { e.taxa = e.n / etapas[i - 1].n * 100; if (!pior || e.taxa < pior.taxa) pior = { ...e, de: etapas[i - 1].rot }; } });
+    box.innerHTML = etapas.map((e, i) => `
+      <div style="margin-bottom:12px">
+        <div class="stat-row" style="padding:0"><span>${esc(e.rot)}</span><span><b>${fmtNum(e.n)}</b>${i > 0 && e.taxa != null ? ` · ${e.taxa.toFixed(1).replace('.', ',')}% da etapa anterior` : ''}</span></div>
+        <div class="barra"><div style="width:${Math.max(e.n / topo * 100, e.n > 0 ? 2 : 0)}%;background:${pior && pior.rot === e.rot ? 'var(--red)' : 'var(--purple)'}"></div></div>
+      </div>`).join('') +
+      (pior ? `<div class="delta" style="margin-top:6px">🔎 Maior perda: <b>${esc(pior.de)} → ${esc(pior.rot)}</b> (só ${pior.taxa.toFixed(1).replace('.', ',')}% passam). ` : '<div class="delta" style="margin-top:6px">') +
+      'Cadastro, envio de arquivo e pagamento consideram quem se cadastrou nos últimos 30 dias. Visitantes incluem quem já é cliente, então a primeira etapa é uma referência.</div>';
+  }
+
+  function desenharReceita(r) {
+    const row = document.getElementById('rowReceita');
+    if (!r) { row.style.display = 'none'; return; }
+    row.style.display = 'block';
+    const msg = document.getElementById('receitaMsg'), mini = document.getElementById('receitaMini'), meses = document.getElementById('receitaMeses');
+    if (!r.tabelaPronta) {
+      msg.innerHTML = '<div class="alerta atencao">⚠ A tabela de pagamentos ainda não existe. Rode <b>pagamentos.sql</b> no Supabase e depois clique em "Importar do Mercado Pago" para trazer o histórico.</div>';
+      mini.innerHTML = ''; meses.innerHTML = ''; return;
+    }
+    if (!r.pagamentos) msg.innerHTML = '<div class="alerta atencao">Nenhum pagamento registrado ainda. Clique em "↻ Importar do Mercado Pago" para trazer o histórico; os novos pagamentos entram sozinhos.</div>';
+    else if (!document.getElementById('receitaMsg').dataset.fixa) msg.innerHTML = '';
+    const v = r.variacaoPercentual;
+    mini.innerHTML = [
+      miniCard('Receita (30 dias)', reais(r.ultimos30dias), v == null ? 'sem base de comparação' : (v >= 0 ? '▲ ' : '▼ ') + Math.abs(v) + '% vs. 30 dias antes'),
+      miniCard('Receita total', reais(r.total), fmtNum(r.pagamentos) + ' pagamentos'),
+      miniCard('Ticket médio', reais(r.ticketMedio), 'por pagamento'),
+      miniCard('Clientes que pagaram', fmtNum(r.pagantesUnicos), fmtNum(r.recorrentes) + ' pagaram 2+ vezes (' + String(r.taxaRenovacao).replace('.', ',') + '%)'),
+      miniCard('Gratuito → pago', String(r.conversaoGratuitoPago).replace('.', ',') + '%', 'dos clientes têm plano pago ativo'),
+    ].join('');
+    const max = Math.max(...r.porMes.map(m => m.receita), 1);
+    meses.innerHTML = '<div class="label" style="margin-bottom:8px">Receita por mês (12 meses)</div>' + r.porMes.map(m => {
+      const [ano, mes] = m.mes.split('-');
+      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px">
+        <span style="width:54px;color:var(--muted)">${MESES_PT[Number(mes) - 1]}/${ano.slice(2)}</span>
+        <div class="barra" style="flex:1"><div style="width:${m.receita > 0 ? Math.max(m.receita / max * 100, 2) : 0}%;background:var(--purple)"></div></div>
+        <span style="width:150px;text-align:right">${m.receita > 0 ? reais(m.receita) + ' · ' + m.pagamentos + ' pgto' + (m.pagamentos === 1 ? '' : 's') : '—'}</span></div>`;
+    }).join('');
+  }
+
+  async function importarMP() {
+    const btn = document.getElementById('btnImportarMP'), msg = document.getElementById('receitaMsg');
+    if (btn.dataset.rodando) return;
+    btn.dataset.rodando = '1'; msg.dataset.fixa = '1';
+    let offset = 0, lidos = 0, gravados = 0;
+    try {
+      for (let volta = 0; volta < 60; volta++) {
+        btn.textContent = '⏳ Importando... ' + lidos + ' lidos';
+        const resp = await fetch('https://cloudx-backend.vercel.app/api/admin/pagamentos/importar-mp', { method: 'POST', headers: cab({ 'Content-Type': 'application/json' }), body: JSON.stringify({ offset }) });
+        if (resp.status === 401) { salvarToken(''); mostrarLogin('Token inválido ou expirado. Entre novamente.'); return; }
+        const r = await resp.json();
+        if (!r.ok) { msg.innerHTML = `<div class="alerta critico">⚠ ${esc(r.erro || 'Não foi possível importar.')}</div>`; return; }
+        lidos += r.lidos; gravados += r.gravados; offset = r.proximoOffset;
+        if (r.fim) break;
+      }
+      msg.innerHTML = `<div class="alerta ok">✅ Importação concluída: ${fmtNum(lidos)} pagamentos lidos no Mercado Pago, ${fmtNum(gravados)} de planos do CloudX. Os que já existiam não são duplicados.</div>`;
+      await carregarTudo();
+    } catch (e) { msg.innerHTML = `<div class="alerta critico">⚠ ${esc(e.message)}</div>`; }
+    finally { btn.textContent = '↻ Importar do Mercado Pago'; delete btn.dataset.rodando; }
+  }
+
   const emailsPorLista = {};
   async function copiarLista(chave, btnId) {
     const lista = emailsPorLista[chave] || [], btn = document.getElementById(btnId), orig = btn.textContent;
@@ -1509,6 +1598,7 @@
     ]);
 
     const falhas = [];
+    try { desenharFunil(analytics && analytics.ok ? analytics : null, resumo && resumo.ok ? resumo.funil : null); desenharReceita(resumo && resumo.ok ? resumo.historicoReceita : null); } catch (e) { /* ignora */ }
 
     // Visão geral
     if (resumo && resumo.ok) {

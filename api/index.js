@@ -272,6 +272,18 @@ app.post('/api/webhook/mp', async (req, res) => {
     if (pagamento.status !== 'approved') return res.sendStatus(200);
     const [userId, plano] = (pagamento.external_reference || '').split('|');
     if (!userId || !plano) return res.sendStatus(200);
+
+    // Registra o pagamento (id único). Se o Mercado Pago avisar de novo, não renova em dobro.
+    // Se a tabela ainda não existe (pagamentos.sql não rodado), segue como antes para nunca travar uma venda.
+    let pagamentoRegistrado = false;
+    const { error: erroReg } = await db.from('pagamentos').insert({
+      mp_payment_id: String(data.id), user_id: userId, plano,
+      valor: Number(pagamento.transaction_amount) || (PRECOS_MRR[plano] || 0),
+      pago_em: pagamento.date_approved || new Date().toISOString(), origem: 'webhook',
+    });
+    if (!erroReg) pagamentoRegistrado = true;
+    else if (erroReg.code === '23505') return res.sendStatus(200);   // já processado antes
+
     // Busca plano atual para calcular renovação
     const { data: perfilAtual } = await db.from('perfis').select('plano_expira_em').eq('id', userId).single();
 
@@ -284,11 +296,16 @@ app.post('/api/webhook/mp', async (req, res) => {
       novaExpiracao = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
 
-    await db.from('perfis').update({
+    const { error: erroPerfil } = await db.from('perfis').update({
       plano,
       plano_expira_em: novaExpiracao.toISOString(),
       ultimo_pagamento_id: String(data.id),
     }).eq('id', userId);
+    if (erroPerfil) {
+      // não deixa o pagamento marcado como processado: o Mercado Pago vai tentar de novo
+      if (pagamentoRegistrado) await db.from('pagamentos').delete().eq('mp_payment_id', String(data.id));
+      return res.sendStatus(500);
+    }
 
     console.log(`✅ Plano ${plano} renovado até ${novaExpiracao.toLocaleDateString('pt-BR')} para ${userId}`);
     res.sendStatus(200);
@@ -486,6 +503,36 @@ function exigirAdminApi(req, res, next) {
   // pequena pausa nas tentativas erradas para dificultar adivinhar o token
   setTimeout(() => res.status(401).json({ ok: false, erro: 'Token de admin inválido.' }), 500);
 }
+
+// Importa o histórico de pagamentos aprovados do Mercado Pago para a tabela pagamentos (seguro repetir: não duplica)
+app.post('/api/admin/pagamentos/importar-mp', exigirAdminApi, async (req, res) => {
+  try {
+    if (!process.env.MP_ACCESS_TOKEN) return res.status(400).json({ ok: false, erro: 'MP_ACCESS_TOKEN não configurada na Vercel.' });
+    const db = getDB();
+    const POR_PAGINA = 50, PAGINAS = 4;           // 200 pagamentos por chamada (cabe no tempo da Vercel)
+    const inicio = Math.max(0, Number((req.body || {}).offset) || 0);
+    let lidos = 0, gravados = 0, fim = false;
+    for (let i = 0; i < PAGINAS; i++) {
+      const off = inicio + i * POR_PAGINA;
+      const r = await mp.listarPagamentos(off, POR_PAGINA);
+      const lista = r.results || [];
+      const linhas = lista.filter(p => p.status === 'approved').map(p => {
+        const [userId, plano] = String(p.external_reference || '').split('|');
+        if (!userId || !PRECOS_MRR[plano]) return null;          // ignora pagamentos que não são de plano do CloudX
+        return { mp_payment_id: String(p.id), user_id: userId, plano, valor: Number(p.transaction_amount) || PRECOS_MRR[plano], pago_em: p.date_approved || p.date_created, origem: 'mercadopago' };
+      }).filter(Boolean);
+      if (linhas.length) {
+        const { error } = await db.from('pagamentos').upsert(linhas, { onConflict: 'mp_payment_id', ignoreDuplicates: true });
+        if (error) return res.status(409).json({ ok: false, erro: error.message.includes('pagamentos') ? 'Tabela pagamentos não existe. Rode pagamentos.sql no Supabase.' : error.message });
+        gravados += linhas.length;
+      }
+      lidos += lista.length;
+      const total = (r.paging && r.paging.total) || 0;
+      if (lista.length < POR_PAGINA || off + POR_PAGINA >= total) { fim = true; break; }
+    }
+    res.json({ ok: true, lidos, gravados, proximoOffset: inicio + PAGINAS * POR_PAGINA, fim });
+  } catch (e) { res.status(500).json({ ok: false, erro: 'Falha ao consultar o Mercado Pago: ' + e.message }); }
+});
 
 // Usado pela tela de login do painel para conferir o token
 app.get('/api/admin/verificar', exigirAdminApi, (req, res) => res.json({ ok: true }));
@@ -709,6 +756,47 @@ app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
       })),
     };
 
+    // Funil dos últimos 30 dias: cadastrou → enviou arquivo → pagou (visitantes vêm do /analytics/stats)
+    const funil = {
+      cadastros: coorte30.length,
+      ativaram: coorte30.filter(enviouArquivo).length,
+      pagaram: coorte30.filter(pagoAtivo).length,
+    };
+
+    // Histórico de receita: tabela pagamentos (pagamentos.sql). Sem ela, o card pede para criar.
+    let receita = { tabelaPronta: false };
+    try {
+      const r = await buscarTudo((a, b) => db.from('pagamentos').select('mp_payment_id, user_id, valor, pago_em').order('pago_em').range(a, b));
+      if (!r.error && r.data) {
+        const chaveMes = (t) => new Date(Date.parse(t) - OFFSET_BR).toISOString().slice(0, 7);   // AAAA-MM (Brasília)
+        const meses = [];
+        const ref = new Date(Date.now() - OFFSET_BR);
+        for (let k = 11; k >= 0; k--) meses.push(new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth() - k, 1)).toISOString().slice(0, 7));
+        const porMes = Object.fromEntries(meses.map(m => [m, { mes: m, receita: 0, pagamentos: 0 }]));
+        const porCliente = new Map();
+        let total = 0, ult30 = 0, ant30 = 0;
+        r.data.forEach(x => {
+          const v = Number(x.valor) || 0, t = Date.parse(x.pago_em);
+          total += v;
+          const m = porMes[chaveMes(x.pago_em)];
+          if (m) { m.receita += v; m.pagamentos++; }
+          porCliente.set(x.user_id, (porCliente.get(x.user_id) || 0) + 1);
+          if (agora - t <= 30 * DIA_MS) ult30 += v; else if (agora - t <= 60 * DIA_MS) ant30 += v;
+        });
+        const pagantesUnicos = porCliente.size, recorrentes = [...porCliente.values()].filter(n => n >= 2).length;
+        const r2 = (n) => Math.round(n * 100) / 100;
+        receita = {
+          tabelaPronta: true, pagamentos: r.data.length, total: r2(total),
+          ticketMedio: r.data.length ? r2(total / r.data.length) : 0,
+          ultimos30dias: r2(ult30), anteriores30dias: r2(ant30),
+          variacaoPercentual: ant30 > 0 ? Math.round(((ult30 - ant30) / ant30) * 100) : null,
+          pagantesUnicos, recorrentes, taxaRenovacao: pct1(recorrentes, pagantesUnicos),
+          conversaoGratuitoPago: pct1(perfis.filter(pagoAtivo).length, perfis.length),
+          porMes: meses.map(m => ({ mes: m, receita: r2(porMes[m].receita), pagamentos: porMes[m].pagamentos })),
+        };
+      }
+    } catch (e) { /* tabela ainda não criada */ }
+
     // ── Clientes por região ──
     const comRegiao = perfis.filter(p => p.cidade || p.estado);
     const clientesPorRegiao = {
@@ -722,7 +810,7 @@ app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
     res.json({
       ok: true,
       clientesPorRegiao,
-      ativacao, blackFriday, promocoesVencendo,
+      ativacao, blackFriday, promocoesVencendo, funil, historicoReceita: receita,
       proximosLimite: { total: candidatosUpgrade.length, lista: proximosLimite },
       geradoEm: new Date(agora).toISOString(),
       saude: { status, latenciaMs, alertas },
@@ -992,7 +1080,7 @@ app.get('/api/analytics/stats', exigirAdminApi, async (req, res) => {
     } catch (e) { /* ignora */ }
 
     // Origem do tráfego: de onde veio cada visitante único (primeiro contato nos últimos 30 dias)
-    let origemTrafego = [];
+    let origemTrafego = [], visitantesUnicos30d = null;
     try {
       let r = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, referrer, origem').gte('created_at', trintaDiasAtras).order('id').range(a, b));
       if (r.error) r = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, referrer').gte('created_at', trintaDiasAtras).order('id').range(a, b));
@@ -1004,6 +1092,7 @@ app.get('/api/analytics/stats', exigirAdminApi, async (req, res) => {
           if (!atual || (atual === 'Direto' && o !== 'Direto')) porVisitante.set(v.visitor_id, o);
         });
         origemTrafego = rankingPor([...porVisitante.values()], o => o, 10);
+        visitantesUnicos30d = porVisitante.size;
       }
     } catch (e) { /* ignora */ }
 
@@ -1012,6 +1101,7 @@ app.get('/api/analytics/stats', exigirAdminApi, async (req, res) => {
       visitantesPorEstado,
       visitantesPorCidade,
       origemTrafego,
+      visitantesUnicos30d,
       visitasHoje: visitasHoje || 0,
       visitasTotal: visitasTotal || 0,
       onlineAgora: onlineAgora || 0,

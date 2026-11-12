@@ -41,4 +41,12 @@ async function buscarPagamento(id) {
   return resultado;
 }
 
-module.exports = { criarPreferencia, buscarPagamento };
+// Lista pagamentos aprovados da conta (mais recentes primeiro), para importar o histórico
+async function listarPagamentos(offset = 0, limit = 50) {
+  const qs = `sort=date_created&criteria=desc&status=approved&limit=${Number(limit) || 50}&offset=${Number(offset) || 0}`;
+  const resultado = await requisicao('GET', `/v1/payments/search?${qs}`);
+  if (resultado.error || resultado.status === 401) throw new Error(resultado.message || resultado.error || 'Mercado Pago recusou a consulta');
+  return resultado;
+}
+
+module.exports = { criarPreferencia, buscarPagamento, listarPagamentos };
