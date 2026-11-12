@@ -38,6 +38,14 @@
   #loginAdmin input { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; margin-bottom: 12px; }
   #loginAdmin button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--purple); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; }
   #loginAdmin button:disabled { opacity: .5; cursor: wait; }
+  #emailIndividual { position: fixed; inset: 0; z-index: 900; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; padding: 20px; }
+  #emailIndividual .box { width: 100%; max-width: 560px; background: var(--sidebar); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+  #emailIndividual h2 { margin: 0 0 14px; font-size: 17px; }
+  #emailIndividual label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 4px; }
+  #emailIndividual input, #emailIndividual textarea { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; font-family: inherit; }
+  #emailIndividual textarea { min-height: 150px; resize: vertical; line-height: 1.5; }
+  #emailIndividual .acoes { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+  #emailIndividual .dica { margin-top: 10px; }
   #loginErro { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 18px; }
   .sidebar {
     width: 220px;
@@ -285,6 +293,21 @@
     <button type="submit" id="loginBtn">Entrar</button>
     <div id="loginErro"></div>
   </form>
+</div>
+
+<div id="emailIndividual">
+  <div class="box">
+    <h2>✉ Enviar e-mail</h2>
+    <label>Para</label><input type="text" id="eiPara" readonly>
+    <label>Assunto</label><input type="text" id="eiAssunto" maxlength="150">
+    <label>Mensagem</label><textarea id="eiCorpo"></textarea>
+    <div class="dica">O e-mail sai pelo mesmo remetente da aba E-mail e já leva o link para a pessoa não receber mais mensagens.</div>
+    <div id="eiMsg"></div>
+    <div class="acoes">
+      <button class="btn-sec" type="button" onclick="fecharEmailIndividual()">Cancelar</button>
+      <button class="btn-sec" type="button" id="eiEnviar" onclick="enviarEmailIndividual()" style="background:var(--purple);color:#fff;border-color:var(--purple)">Enviar</button>
+    </div>
+  </div>
 </div>
 
 <div class="sidebar">
@@ -1045,6 +1068,45 @@
       '<div class="delta" style="margin-top:6px">Visitantes únicos, pela primeira origem registrada. "Direto" = digitou o endereço, favorito ou app sem origem. Use links com <b>?utm_source=instagram</b> para identificar suas divulgações.</div>';
   }
 
+  // ── E-mail individual dentro do painel (sem abrir Gmail nem outro programa) ──
+  const emailItens = {};   // { chave: [{ email, assunto, corpo }] }
+  let eiAtual = null;
+  function linkEmailIndividual(chave, i) {
+    const it = (emailItens[chave] || [])[i];
+    if (!it || !it.email || !it.email.includes('@')) return '';
+    return `<a class="link-aba" id="ei-${chave}-${i}" onclick="abrirEmailIndividual('${chave}', ${i})">✉ Enviar e-mail</a>`;
+  }
+  function abrirEmailIndividual(chave, i) {
+    const it = (emailItens[chave] || [])[i]; if (!it) return;
+    eiAtual = { chave, i };
+    document.getElementById('eiPara').value = it.email;
+    document.getElementById('eiAssunto').value = it.assunto;
+    document.getElementById('eiCorpo').value = it.corpo;
+    document.getElementById('eiMsg').innerHTML = '';
+    document.getElementById('eiEnviar').disabled = false; document.getElementById('eiEnviar').textContent = 'Enviar';
+    document.getElementById('emailIndividual').style.display = 'flex';
+    setTimeout(() => document.getElementById('eiCorpo').focus(), 50);
+  }
+  function fecharEmailIndividual() { document.getElementById('emailIndividual').style.display = 'none'; eiAtual = null; }
+  async function enviarEmailIndividual() {
+    if (!eiAtual) return;
+    const email = document.getElementById('eiPara').value, assunto = document.getElementById('eiAssunto').value, corpo = document.getElementById('eiCorpo').value;
+    const msg = document.getElementById('eiMsg'), btn = document.getElementById('eiEnviar');
+    if (assunto.trim().length < 3 || corpo.trim().length < 10) { msg.innerHTML = '<div class="alerta atencao">⚠ Preencha o assunto e a mensagem (mínimo de 10 letras).</div>'; return; }
+    btn.disabled = true; btn.textContent = 'Enviando...'; msg.innerHTML = '';
+    try {
+      const r = await emailChamar('/individual', { email, assunto, corpo });
+      if (r._http === 401) { salvarToken(''); fecharEmailIndividual(); mostrarLogin('Token inválido ou expirado. Entre novamente.'); return; }
+      if (!r.ok) { msg.innerHTML = `<div class="alerta critico">⚠ ${esc(r.erro || 'Não foi possível enviar.')}</div>`; btn.disabled = false; btn.textContent = 'Enviar'; return; }
+      const link = document.getElementById(`ei-${eiAtual.chave}-${eiAtual.i}`);
+      if (link) { link.textContent = '✔ Enviado'; link.removeAttribute('onclick'); link.style.color = 'var(--green, #22c55e)'; link.style.cursor = 'default'; }
+      msg.innerHTML = '<div class="alerta ok">✅ E-mail enviado para ' + esc(email) + '.</div>';
+      btn.textContent = 'Enviado';
+      setTimeout(fecharEmailIndividual, 1200);
+    } catch (e) { msg.innerHTML = `<div class="alerta critico">⚠ ${esc(e.message)}</div>`; btn.disabled = false; btn.textContent = 'Enviar'; }
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && eiAtual) fecharEmailIndividual(); });
+
   const emailsPorLista = {};
   async function copiarLista(chave, btnId) {
     const lista = emailsPorLista[chave] || [], btn = document.getElementById(btnId), orig = btn.textContent;
@@ -1067,14 +1129,13 @@
     const lista = a.nuncaEnviaram.lista || [], enviaram = a.enviaram || [];
     emailsPorLista.ativacao = lista.map(c => c.email).filter(e => e.includes('@'));
     const box = document.getElementById('ativacaoBox');
-    const assunto = encodeURIComponent('Falta pouco para usar seu espaço no CloudX');
-    const corpo = encodeURIComponent('Olá! Vi que você criou sua conta no CloudX mas ainda não enviou nenhum arquivo. É rápido: entre, clique em enviar e arraste o que quiser guardar. Se tiver qualquer dúvida, é só responder este e-mail.');
-    const mailto = (e) => e.includes('@') ? `<a class="link-aba" href="mailto:${esc(e)}?subject=${assunto}&body=${corpo}">✉ Enviar e-mail</a>` : '';
+    emailItens.ativacao = lista.map(c => ({ email: c.email, assunto: 'Falta pouco para usar seu espaço no CloudX',
+      corpo: 'Olá! Vi que você criou sua conta no CloudX mas ainda não enviou nenhum arquivo. É rápido: entre, clique em enviar e arraste o que quiser guardar. Se tiver qualquer dúvida, é só responder este e-mail.' }));
     const nao = !lista.length ? '<div class="vazio">Todos os clientes cadastrados já enviaram arquivos. 🎉</div>' :
       `<div class="label" style="margin-bottom:8px;color:var(--red)">❌ NÃO ENVIARAM NENHUM ARQUIVO (${fmtNum(a.nuncaEnviaram.total)})</div>
        <table class="leads-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Cadastro</th><th>Situação</th><th></th></tr></thead><tbody>` +
-      lista.map(c => `<tr><td>${esc(c.email)}</td><td>${esc(NOMES_PLANO[c.plano] || c.plano)}</td><td class="lead-data">há ${c.dias} dia${c.dias === 1 ? '' : 's'}</td>` +
-        `<td><span class="badge inativo">0 arquivos</span></td><td>${mailto(c.email)}</td></tr>`).join('') + `</tbody></table>` +
+      lista.map((c, i) => `<tr><td>${esc(c.email)}</td><td>${esc(NOMES_PLANO[c.plano] || c.plano)}</td><td class="lead-data">há ${c.dias} dia${c.dias === 1 ? '' : 's'}</td>` +
+        `<td><span class="badge inativo">0 arquivos</span></td><td>${linkEmailIndividual('ativacao', i)}</td></tr>`).join('') + `</tbody></table>` +
       (a.nuncaEnviaram.total > lista.length ? `<div class="dica" style="margin-top:10px">Mostrando ${lista.length} de ${fmtNum(a.nuncaEnviaram.total)}.</div>` : '');
     const sim = !enviaram.length ? '' :
       `<div style="margin-top:16px"><a class="link-aba" onclick="document.getElementById('ativacaoEnviaram').style.display = document.getElementById('ativacaoEnviaram').style.display === 'none' ? 'block' : 'none'">▾ Ver quem já enviou (${fmtNum(enviaram.length)})</a></div>
@@ -1111,13 +1172,13 @@
     const lista = v.lista || [];
     emailsPorLista.vencendo = lista.map(c => c.email).filter(e => e.includes('@'));
     if (!lista.length) { box.innerHTML = '<div class="vazio">Nenhuma promoção vence nos próximos 30 dias.</div>'; return; }
-    const assunto = encodeURIComponent('Sua promoção no CloudX está terminando');
+    emailItens.vencendo = lista.map(c => ({ email: c.email, assunto: 'Sua promoção no CloudX está terminando',
+      corpo: `Olá! Sua promoção no CloudX termina em ${c.dias} dia${c.dias === 1 ? '' : 's'}. Para manter seus arquivos com o mesmo espaço, vale conhecer nossos planos a partir de R$ 4,99/mês. Qualquer dúvida, é só responder este e-mail.` }));
     box.innerHTML = `<table class="leads-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Vence em</th><th>Uso</th><th></th></tr></thead><tbody>` +
-      lista.map(c => {
-        const corpo = encodeURIComponent(`Olá! Sua promoção no CloudX termina em ${c.dias} dia${c.dias === 1 ? '' : 's'}. Para manter seus arquivos com o mesmo espaço, vale conhecer nossos planos a partir de R$ 4,99/mês. Qualquer dúvida, é só responder este e-mail.`);
+      lista.map((c, i) => {
         return `<tr><td>${esc(c.email)}</td><td>${esc(NOMES_PLANO[c.plano] || c.plano)}</td>` +
           `<td class="lead-data">${c.dias} dia${c.dias === 1 ? '' : 's'} (${new Date(c.expiraEm).toLocaleDateString('pt-BR')})</td><td>${c.percentual}%</td>` +
-          `<td>${c.email.includes('@') ? `<a class="link-aba" href="mailto:${esc(c.email)}?subject=${assunto}&body=${corpo}">✉ Enviar e-mail</a>` : ''}</td></tr>`;
+          `<td>${linkEmailIndividual('vencendo', i)}</td></tr>`;
       }).join('') + `</tbody></table>` +
       (v.total > lista.length ? `<div class="dica" style="margin-top:10px">Mostrando as ${lista.length} que vencem primeiro, de ${fmtNum(v.total)}.</div>` : '');
   }
@@ -1129,16 +1190,16 @@
     row.style.display = 'block';
     limiteEmails = (info.lista || []).map(c => c.email).filter(e => e && e.includes('@'));
     if (!info.lista || !info.lista.length) { box.innerHTML = '<div class="vazio">Nenhum cliente usando 80% ou mais da cota no momento.</div>'; return; }
-    const assunto = encodeURIComponent('Seu espaço no CloudX está acabando');
-    const linhas = info.lista.map(c => {
+    emailItens.limite = info.lista.map(c => ({ email: c.email, assunto: 'Seu espaço no CloudX está acabando',
+      corpo: `Olá! Você já está usando ${c.percentual}% do seu espaço no CloudX. Para continuar enviando arquivos sem interrupção, vale conhecer nossos planos com mais armazenamento. Qualquer dúvida é só responder este e-mail.` }));
+    const linhas = info.lista.map((c, i) => {
       const cor = c.percentual >= 95 ? 'var(--red)' : 'var(--purple)';
-      const corpo = encodeURIComponent(`Olá! Você já está usando ${c.percentual}% do seu espaço no CloudX. Para continuar enviando arquivos sem interrupção, vale conhecer nossos planos com mais armazenamento. Qualquer dúvida é só responder este e-mail.`);
       return `<tr>
         <td>${esc(c.email)}</td>
         <td>${esc(NOMES_PLANO[c.plano] || c.plano)}</td>
         <td style="min-width:140px"><div class="stat-row" style="padding:0"><span>${c.percentual}%</span><span class="lead-data">${fmtBytes(c.usadoBytes)} de ${fmtBytes(c.limiteBytes)}</span></div>
           <div class="barra"><div style="width:${Math.min(100, c.percentual)}%;background:${cor}"></div></div></td>
-        <td>${c.email.includes('@') ? `<a class="link-aba" href="mailto:${esc(c.email)}?subject=${assunto}&body=${corpo}">✉ Enviar e-mail</a>` : ''}</td>
+        <td>${linkEmailIndividual('limite', i)}</td>
       </tr>`;
     }).join('');
     box.innerHTML = `<table class="leads-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Uso</th><th></th></tr></thead><tbody>${linhas}</tbody></table>` +

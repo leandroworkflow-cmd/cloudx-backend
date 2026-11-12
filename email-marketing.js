@@ -331,6 +331,29 @@ module.exports = function registrarEmailMarketing(app, { getDB, listarTodosUsuar
     }
   });
 
+  // ── E-mail individual: um cliente cadastrado, escrito no painel (mesmo envio e mesmo link de descadastro das campanhas) ──
+  app.post('/api/admin/email/individual', exigirAdmin, async (req, res) => {
+    try {
+      if (!gmailConfigurado()) return res.status(400).json({ ok: false, erro: MSG_GMAIL });
+      const { email, assunto, corpo } = req.body || {};
+      const destino = String(email || '').trim().toLowerCase();
+      if (!EMAIL_OK.test(destino)) return res.status(400).json({ ok: false, erro: 'E-mail do destinatário inválido.' });
+      const problema = validarTexto(assunto, corpo);
+      if (problema) return res.status(400).json({ ok: false, erro: problema });
+      const db = getDB();
+      // só envia para cliente cadastrado que NÃO pediu descadastro (carregarBase já tira quem saiu da lista)
+      const base = await carregarBase(db);
+      const pessoa = base.pessoas.find(p => p.email === destino);
+      if (!pessoa) return res.status(404).json({ ok: false, erro: 'Esse e-mail não é de um cliente cadastrado, ou a pessoa pediu para não receber mais e-mails.' });
+      if (await contarEnviadosHoje(db) >= LIMITE_DIA) return res.status(429).json({ ok: false, erro: `Limite diário de ${LIMITE_DIA} e-mails atingido. Tente amanhã.` });
+      await enviarUm(criarTransporte(), { email: destino, nome: pessoa.nome, assunto, corpo });
+      res.json({ ok: true, para: destino });
+    } catch (e) {
+      if (e.pendente) return res.status(409).json({ ok: false, erro: e.message });
+      res.status(erroLogin(e) ? 400 : 500).json({ ok: false, erro: erroLogin(e) ? descreverErroLogin(e) : 'Falha no envio: ' + (e.response || e.message) });
+    }
+  });
+
   // ── Prepara a campanha: grava a lista de destinatários (o envio acontece aos poucos, em /lote) ──
   app.post('/api/admin/email/preparar', exigirAdmin, async (req, res) => {
     try {
