@@ -1155,6 +1155,16 @@
     SP: [3, 4, 'São Paulo'], MG: [4, 4, 'Minas Gerais'], ES: [5, 4, 'Espírito Santo'], SE: [6, 4, 'Sergipe'], AL: [7, 4, 'Alagoas'],
     PR: [3, 5, 'Paraná'], RJ: [4, 5, 'Rio de Janeiro'], SC: [3, 6, 'Santa Catarina'], RS: [3, 7, 'Rio Grande do Sul'],
   };
+  // Cor = região do Brasil; intensidade = quantidade. 'rgb' é a cor da região; 'txt' é a cor do texto quando o bloco está bem preenchido
+  const MAPA_REGIOES = {
+    Norte:          { rgb: '34,197,94',  txt: '#06210f', ufs: ['AC', 'AM', 'AP', 'PA', 'RO', 'RR', 'TO'] },
+    Nordeste:       { rgb: '249,115,22', txt: '#2b1100', ufs: ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE'] },
+    'Centro-Oeste': { rgb: '234,179,8',  txt: '#2b2000', ufs: ['DF', 'GO', 'MS', 'MT'] },
+    Sudeste:        { rgb: '59,130,246', txt: '#ffffff', ufs: ['ES', 'MG', 'RJ', 'SP'] },
+    Sul:            { rgb: '168,85,247', txt: '#ffffff', ufs: ['PR', 'RS', 'SC'] },
+  };
+  const MAPA_REGIAO_DA_UF = {};
+  Object.entries(MAPA_REGIOES).forEach(([nome, r]) => r.ufs.forEach(uf => { MAPA_REGIAO_DA_UF[uf] = nome; }));
   const mapaDados = { clientes: [], visitantes: [] };
   let mapaAtual = 'clientes';
   function mapaModo(m) {
@@ -1173,12 +1183,14 @@
     const total = lista.reduce((a, [, v]) => a + v, 0), max = Math.max(...Object.values(valores), 0);
     const T = 62, G = 8, P = T + G;
     const tiles = Object.entries(MAPA_UF).map(([uf, [c, l, nome]]) => {
+      const reg = MAPA_REGIOES[MAPA_REGIAO_DA_UF[uf]];
       const v = valores[uf] || 0, t = max > 0 ? Math.sqrt(v / max) : 0;   // raiz: estados pequenos ainda aparecem
-      const fill = v > 0 ? `rgba(59,130,246,${(0.22 + 0.78 * t).toFixed(2)})` : 'rgba(148,163,184,.10)';
-      const corTxt = t > 0.55 ? '#fff' : 'var(--text)';
+      const fill = v > 0 ? `rgba(${reg.rgb},${(0.28 + 0.72 * t).toFixed(2)})` : 'rgba(148,163,184,.08)';
+      const borda = v > 0 ? `rgba(${reg.rgb},1)` : `rgba(${reg.rgb},.45)`;   // a borda mostra a região mesmo sem dados
+      const corTxt = v > 0 && t > 0.5 ? reg.txt : 'var(--text)';
       const x = c * P, y = l * P;
-      return `<g class="uf" tabindex="0"><title>${nome} (${uf}): ${v} ${rot}${v === 1 ? '' : 's'}${total ? ' · ' + (v / total * 100).toFixed(1).replace('.', ',') + '%' : ''}</title>
-        <rect x="${x}" y="${y}" width="${T}" height="${T}" rx="10" fill="${fill}" stroke="var(--border)"/>
+      return `<g class="uf" tabindex="0"><title>${nome} (${uf}) · ${MAPA_REGIAO_DA_UF[uf]}: ${v} ${rot}${v === 1 ? '' : 's'}${total ? ' · ' + (v / total * 100).toFixed(1).replace('.', ',') + '%' : ''}</title>
+        <rect x="${x}" y="${y}" width="${T}" height="${T}" rx="10" fill="${fill}" stroke="${borda}" stroke-width="1.5"/>
         <text x="${x + T / 2}" y="${y + (v > 0 ? 28 : 36)}" text-anchor="middle" font-size="16" font-weight="700" fill="${v > 0 ? corTxt : 'var(--muted)'}">${uf}</text>
         ${v > 0 ? `<text x="${x + T / 2}" y="${y + 48}" text-anchor="middle" font-size="13" fill="${corTxt}">${fmtNum(v)}</text>` : ''}</g>`;
     }).join('');
@@ -1189,12 +1201,14 @@
       lat.innerHTML = `<div class="vazio">Ainda sem ${rot}s com estado identificado. ${mapaAtual === 'clientes' ? 'Os clientes são localizados no próximo login.' : 'Aguarde novas visitas.'}</div>`;
       return;
     }
-    lat.innerHTML = `<div class="label" style="margin-bottom:8px">Mais ${rot}s por estado</div>` +
-      lista.slice(0, 6).map(([uf, v]) => `<div style="margin-bottom:10px"><div class="stat-row" style="padding:0"><span>${MAPA_UF[uf][2]} (${uf})</span><span>${fmtNum(v)} · ${(v / total * 100).toFixed(1).replace('.', ',')}%</span></div>
-        <div class="barra"><div style="width:${Math.round(v / max * 100)}%;background:var(--purple)"></div></div></div>`).join('') +
-      `<div class="delta" style="margin-top:14px">Cor mais forte = mais ${rot}s</div><div class="mapa-legenda"></div>
-       <div class="stat-row" style="padding:0;font-size:11px;color:var(--muted)"><span>0</span><span>${fmtNum(max)}</span></div>
-       <div class="delta" style="margin-top:12px">${fmtNum(lista.length)} de 27 estados com ${rot}s · ${fmtNum(total)} no total. ${mapaAtual === 'clientes' ? 'Só clientes cujo estado já foi identificado entram no mapa.' : 'Localização aproximada pelo IP; só Brasil.'}</div>`;
+    // total por região (cor = região, intensidade = quantidade)
+    const porRegiao = Object.entries(MAPA_REGIOES).map(([nome, r]) => ({ nome, rgb: r.rgb, total: r.ufs.reduce((a, uf) => a + (valores[uf] || 0), 0) })).sort((a, b) => b.total - a.total);
+    lat.innerHTML = `<div class="label" style="margin-bottom:8px">Por região</div>` +
+      porRegiao.map(r => `<div style="margin-bottom:10px"><div class="stat-row" style="padding:0"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgb(${r.rgb});margin-right:8px"></span>${r.nome}</span><span>${fmtNum(r.total)}${total ? ' · ' + (r.total / total * 100).toFixed(1).replace('.', ',') + '%' : ''}</span></div>
+        <div class="barra"><div style="width:${max ? Math.round(r.total / Math.max(...porRegiao.map(x => x.total), 1) * 100) : 0}%;background:rgb(${r.rgb})"></div></div></div>`).join('') +
+      `<div class="label" style="margin:16px 0 8px">Mais ${rot}s por estado</div>` +
+      lista.slice(0, 5).map(([uf, v]) => `<div class="stat-row" style="padding:2px 0"><span>${MAPA_UF[uf][2]} (${uf})</span><span>${fmtNum(v)} · ${(v / total * 100).toFixed(1).replace('.', ',')}%</span></div>`).join('') +
+      `<div class="delta" style="margin-top:14px">Cor = região do Brasil · cor mais forte = mais ${rot}s. ${fmtNum(lista.length)} de 27 estados com ${rot}s (${fmtNum(total)} no total). ${mapaAtual === 'clientes' ? 'Só clientes cujo estado já foi identificado entram no mapa.' : 'Localização aproximada pelo IP; só Brasil.'}</div>`;
   }
 
   const MESES_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
