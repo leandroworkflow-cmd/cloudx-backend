@@ -32,6 +32,42 @@ const regiaoDaRequisicao = (req) => ({
   estado: lerHeader(req, 'x-vercel-ip-country-region'),
   pais:   lerHeader(req, 'x-vercel-ip-country'),
 });
+// Lê TODAS as linhas de uma consulta do Supabase (o limite padrão é 1000 por chamada). Ate 20000 linhas.
+// criar(ini, fim) deve devolver a consulta ja com .range(ini, fim)
+async function buscarTudo(criar) {
+  const tudo = [];
+  for (let ini = 0; ini < 20000; ini += 1000) {
+    const { data, error } = await criar(ini, ini + 999);
+    if (error) return { data: null, error };
+    if (!data || !data.length) break;
+    tudo.push(...data);
+    if (data.length < 1000) break;
+  }
+  return { data: tudo, error: null };
+}
+
+// ── ORIGEM DO TRÁFEGO: de onde veio o visitante (utm_source do link, senão o referrer) ──
+const ORIGENS_CONHECIDAS = [
+  [/(^|\.)google\./, 'Google'], [/(^|\.)bing\./, 'Bing'], [/duckduckgo/, 'DuckDuckGo'], [/yahoo/, 'Yahoo'],
+  [/instagram/, 'Instagram'], [/facebook|^fb\.|^m\.me$/, 'Facebook'], [/whatsapp|^wa\.me$/, 'WhatsApp'],
+  [/youtube|^youtu\.be$/, 'YouTube'], [/tiktok/, 'TikTok'], [/linkedin|^lnkd\.in$/, 'LinkedIn'],
+  [/^t\.co$|twitter|^x\.com$/, 'X / Twitter'], [/^t\.me$|telegram/, 'Telegram'], [/pinterest/, 'Pinterest'], [/reddit/, 'Reddit'],
+];
+function classificarOrigem(referrer, utm) {
+  const nomeAmigavel = (txt) => {
+    const t = String(txt).toLowerCase().trim();
+    const achou = ORIGENS_CONHECIDAS.find(([re]) => re.test(t));
+    return achou ? achou[1] : (t.charAt(0).toUpperCase() + t.slice(1));
+  };
+  if (utm && String(utm).trim()) return nomeAmigavel(String(utm).slice(0, 40));
+  if (!referrer) return 'Direto';
+  let host = '';
+  try { host = new URL(referrer).hostname.toLowerCase().replace(/^www\./, ''); } catch (e) { return 'Direto'; }
+  if (!host || /cloudx/i.test(host)) return 'Direto';   // navegação interna do próprio site
+  const achou = ORIGENS_CONHECIDAS.find(([re]) => re.test(host));
+  return achou ? achou[1] : host;
+}
+
 // Agrupa uma lista [{cidade, estado}] em ranking {nome, total}
 const rankingPor = (lista, chave, limite = 8) => {
   const cont = {};
@@ -288,7 +324,7 @@ module.exports = app;
 // ============================================
 
 // Lista todos os leads (usado pelo dashboard admin)
-app.get('/api/leads', async (req, res) => {
+app.get('/api/leads', exigirAdminApi, async (req, res) => {
   const db = getDB();
   const { data, error } = await db.from('leads').select('*').order('created_at', { ascending: false });
   if (error) return res.status(500).json({ erro: error.message });
@@ -313,7 +349,7 @@ app.post('/api/leads', async (req, res) => {
 });
 
 // Atualiza status/score/plano de um lead (usado no CRM interno)
-app.patch('/api/leads/:id', async (req, res) => {
+app.patch('/api/leads/:id', exigirAdminApi, async (req, res) => {
   const { id } = req.params;
   const { status, score, plano_recomendado, mensagem } = req.body;
   const db = getDB();
@@ -329,7 +365,7 @@ app.patch('/api/leads/:id', async (req, res) => {
 });
 
 // Remove um lead
-app.delete('/api/leads/:id', async (req, res) => {
+app.delete('/api/leads/:id', exigirAdminApi, async (req, res) => {
   const { id } = req.params;
   const db = getDB();
   const { error } = await db.from('leads').delete().eq('id', id);
@@ -342,7 +378,7 @@ app.delete('/api/leads/:id', async (req, res) => {
 // (agora inclui numeros de Leads/CRM tambem)
 // ============================================
 
-app.get('/dashboard/stats', async (req, res) => {
+app.get('/dashboard/stats', exigirAdminApi, async (req, res) => {
   try {
     const db = getDB();
 
@@ -441,6 +477,19 @@ function mascararEmail(email) {
 }
 
 // E-mails completos só aparecem se a variável ADMIN_TOKEN existir e o painel enviar o mesmo token
+// Exige o ADMIN_TOKEN (cabeçalho x-admin-token). Protege tudo que o painel /admin lê ou altera.
+// Rotas públicas continuam abertas: cadastro de lead, chatbot, pageview/heartbeat e as rotas dos clientes.
+function exigirAdminApi(req, res, next) {
+  res.setHeader('Cache-Control', 'no-store');
+  if (!process.env.ADMIN_TOKEN) return res.status(503).json({ ok: false, erro: 'ADMIN_TOKEN não configurada na Vercel.' });
+  if (tokenAdminValido(req)) return next();
+  // pequena pausa nas tentativas erradas para dificultar adivinhar o token
+  setTimeout(() => res.status(401).json({ ok: false, erro: 'Token de admin inválido.' }), 500);
+}
+
+// Usado pela tela de login do painel para conferir o token
+app.get('/api/admin/verificar', exigirAdminApi, (req, res) => res.json({ ok: true }));
+
 function tokenAdminValido(req) {
   const esperado = process.env.ADMIN_TOKEN || '';
   const recebido = String(req.headers['x-admin-token'] || '');
@@ -449,7 +498,7 @@ function tokenAdminValido(req) {
   return a.length === b.length && require('crypto').timingSafeEqual(a, b);
 }
 
-app.get('/api/admin/resumo', async (req, res) => {
+app.get('/api/admin/resumo', exigirAdminApi, async (req, res) => {
   try {
     const db = getDB();
     const emailCompleto = tokenAdminValido(req);
@@ -506,6 +555,7 @@ app.get('/api/admin/resumo', async (req, res) => {
     let gratuitas = 0, pagas = 0, vencidas = 0;
     let mrr = 0, churn30 = 0, receitaPerdida = 0;
     let storageUsado = 0, cotaAlocada = 0;
+    const candidatosUpgrade = [];
 
     perfis.forEach(p => {
       const plano = p.plano || 'free';
@@ -530,7 +580,14 @@ app.get('/api/admin/resumo', async (req, res) => {
       porPlano[planoEfetivo] = (porPlano[planoEfetivo] || 0) + 1;
       storageUsado += p.storage_usado || 0;
       cotaAlocada += PLANOS[planoEfetivo] || PLANOS.free;
+      const limiteBytes = PLANOS[planoEfetivo] || PLANOS.free;
+      const pct = limiteBytes > 0 ? ((p.storage_usado || 0) / limiteBytes) * 100 : 0;
+      if (pct >= 80) candidatosUpgrade.push({ id: p.id, plano: planoEfetivo, usadoBytes: p.storage_usado || 0, limiteBytes, percentual: Math.round(pct) });
     });
+    const emailPorId = new Map(usuarios.map(u => [u.id, u.email]));
+    const proximosLimite = candidatosUpgrade
+      .sort((a, b) => b.percentual - a.percentual).slice(0, 15)
+      .map(c => ({ email: emailPorId.get(c.id) || '—', plano: c.plano, usadoBytes: c.usadoBytes, limiteBytes: c.limiteBytes, percentual: c.percentual }));
 
     const baseChurn = pagas + churn30;
     const taxaChurn = baseChurn > 0 ? Math.round((churn30 / baseChurn) * 1000) / 10 : 0;
@@ -597,6 +654,7 @@ app.get('/api/admin/resumo', async (req, res) => {
     res.json({
       ok: true,
       clientesPorRegiao,
+      proximosLimite: { total: candidatosUpgrade.length, lista: proximosLimite },
       geradoEm: new Date(agora).toISOString(),
       saude: { status, latenciaMs, alertas },
       usuarios: { total: totalUsuarios, ativos, inativos },
@@ -624,14 +682,14 @@ app.get('/api/admin/resumo', async (req, res) => {
 // ROTAS DE CAMPANHAS
 // ============================================
 
-app.get('/api/campanhas', async (req, res) => {
+app.get('/api/campanhas', exigirAdminApi, async (req, res) => {
   const db = getDB();
   const { data, error } = await db.from('campanhas').select('*').order('created_at', { ascending: false });
   if (error) return res.status(500).json({ erro: error.message });
   res.json(data);
 });
 
-app.post('/api/campanhas', async (req, res) => {
+app.post('/api/campanhas', exigirAdminApi, async (req, res) => {
   const { nome, canal, orcamento, data_inicio, data_fim, observacoes } = req.body;
   if (!nome) return res.status(400).json({ erro: 'Nome obrigatorio' });
   const db = getDB();
@@ -650,7 +708,7 @@ app.post('/api/campanhas', async (req, res) => {
   res.json({ ok: true, campanha: data });
 });
 
-app.patch('/api/campanhas/:id', async (req, res) => {
+app.patch('/api/campanhas/:id', exigirAdminApi, async (req, res) => {
   const { id } = req.params;
   const { nome, canal, status, orcamento, cliques, conversoes, data_fim, observacoes } = req.body;
   const db = getDB();
@@ -669,7 +727,7 @@ app.patch('/api/campanhas/:id', async (req, res) => {
   res.json({ ok: true, campanha: data });
 });
 
-app.delete('/api/campanhas/:id', async (req, res) => {
+app.delete('/api/campanhas/:id', exigirAdminApi, async (req, res) => {
   const { id } = req.params;
   const db = getDB();
   const { error } = await db.from('campanhas').delete().eq('id', id);
@@ -768,17 +826,25 @@ const visitaInvalida = (req, vid) => pareceBot(req) || !req.body || req.body.hum
 
 // Registra uma visualizacao de pagina + marca o visitante como online
 app.post('/api/analytics/pageview', async (req, res) => {
-  const { visitor_id, pagina, referrer } = req.body || {};
+  const { visitor_id, pagina, referrer, utm_source } = req.body || {};
   if (!visitor_id || !pagina) return res.status(400).json({ erro: 'visitor_id e pagina obrigatorios' });
   if (visitaInvalida(req, visitor_id)) return res.json({ ok: true, ignorado: true });
   const db = getDB();
   const linha = { visitor_id, pagina: String(pagina).slice(0, 200), referrer: referrer ? String(referrer).slice(0, 300) : null };
 
-  // Guarda o navegador para auditoria e a região (se as colunas existirem); senão grava sem elas
+  // Guarda navegador, região e origem (utm). Se alguma coluna ainda não existir, tenta com menos campos
   const ua = String(req.headers['user-agent'] || '').slice(0, 300);
-  let { error } = await db.from('page_views').insert({ ...linha, user_agent: ua, ...regiaoDaRequisicao(req) });
-  if (error) ({ error } = await db.from('page_views').insert({ ...linha, user_agent: ua }));
-  if (error) await db.from('page_views').insert(linha);
+  const utm = utm_source ? String(utm_source).slice(0, 40) : null;
+  const tentativas = [
+    { ...linha, user_agent: ua, ...regiaoDaRequisicao(req), origem: utm },
+    { ...linha, user_agent: ua, ...regiaoDaRequisicao(req) },
+    { ...linha, user_agent: ua },
+    linha,
+  ];
+  for (const t of tentativas) {
+    const { error } = await db.from('page_views').insert(t);
+    if (!error) break;
+  }
   await db.from('visitantes_online').upsert({ visitor_id, pagina: linha.pagina, updated_at: new Date().toISOString() });
 
   res.json({ ok: true });
@@ -796,7 +862,7 @@ app.post('/api/analytics/heartbeat', async (req, res) => {
 });
 
 // Estatisticas para o dashboard
-app.get('/api/analytics/stats', async (req, res) => {
+app.get('/api/analytics/stats', exigirAdminApi, async (req, res) => {
   try {
     const db = getDB();
     const agora = new Date();
@@ -815,11 +881,11 @@ app.get('/api/analytics/stats', async (req, res) => {
     const { count: onlineAgora } = await db.from('visitantes_online').select('visitor_id', { count: 'exact', head: true }).gte('updated_at', cincoMinAtras);
 
     // Visitantes unicos hoje
-    const { data: visitantesHojeData } = await db.from('page_views').select('visitor_id').gte('created_at', inicioHoje);
+    const { data: visitantesHojeData } = await buscarTudo((a, b) => db.from('page_views').select('visitor_id').gte('created_at', inicioHoje).order('id').range(a, b));
     const visitantesUnicosHoje = new Set((visitantesHojeData || []).map(v => v.visitor_id)).size;
 
     // Paginas mais acessadas (ultimos 30 dias)
-    const { data: paginasData } = await db.from('page_views').select('pagina').gte('created_at', trintaDiasAtras);
+    const { data: paginasData } = await buscarTudo((a, b) => db.from('page_views').select('pagina').gte('created_at', trintaDiasAtras).order('id').range(a, b));
     const contagemPaginas = {};
     (paginasData || []).forEach(p => { contagemPaginas[p.pagina] = (contagemPaginas[p.pagina] || 0) + 1; });
     const paginasMaisAcessadas = Object.entries(contagemPaginas)
@@ -829,7 +895,7 @@ app.get('/api/analytics/stats', async (req, res) => {
 
     // Visitas por dia (ultimos 14 dias, para o grafico)
     const catorzeDiasAtras = new Date(agora.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: visitasPorDiaData } = await db.from('page_views').select('created_at').gte('created_at', catorzeDiasAtras);
+    const { data: visitasPorDiaData } = await buscarTudo((a, b) => db.from('page_views').select('created_at').gte('created_at', catorzeDiasAtras).order('id').range(a, b));
     const contagemPorDia = {};
     (visitasPorDiaData || []).forEach(v => {
       const dia = new Date(Date.parse(v.created_at) - OFFSET_BR).toISOString().slice(0, 10); // AAAA-MM-DD (Brasília)
@@ -846,7 +912,7 @@ app.get('/api/analytics/stats', async (req, res) => {
     // Visitantes únicos por cidade/estado (últimos 30 dias). Se as colunas não existem, vem vazio.
     let visitantesPorEstado = [], visitantesPorCidade = [];
     try {
-      const { data: regData, error: regErro } = await db.from('page_views').select('visitor_id, cidade, estado').gte('created_at', trintaDiasAtras).not('estado', 'is', null);
+      const { data: regData, error: regErro } = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, cidade, estado').gte('created_at', trintaDiasAtras).not('estado', 'is', null).order('id').range(a, b));
       if (!regErro && regData) {
         const vistos = new Map();
         regData.forEach(v => { if (!vistos.has(v.visitor_id)) vistos.set(v.visitor_id, v); });
@@ -856,10 +922,27 @@ app.get('/api/analytics/stats', async (req, res) => {
       }
     } catch (e) { /* ignora */ }
 
+    // Origem do tráfego: de onde veio cada visitante único (primeiro contato nos últimos 30 dias)
+    let origemTrafego = [];
+    try {
+      let r = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, referrer, origem').gte('created_at', trintaDiasAtras).order('id').range(a, b));
+      if (r.error) r = await buscarTudo((a, b) => db.from('page_views').select('visitor_id, referrer').gte('created_at', trintaDiasAtras).order('id').range(a, b));
+      if (!r.error && r.data) {
+        const porVisitante = new Map();
+        r.data.forEach(v => {
+          const o = classificarOrigem(v.referrer, v.origem);
+          const atual = porVisitante.get(v.visitor_id);
+          if (!atual || (atual === 'Direto' && o !== 'Direto')) porVisitante.set(v.visitor_id, o);
+        });
+        origemTrafego = rankingPor([...porVisitante.values()], o => o, 10);
+      }
+    } catch (e) { /* ignora */ }
+
     res.json({
       ok: true,
       visitantesPorEstado,
       visitantesPorCidade,
+      origemTrafego,
       visitasHoje: visitasHoje || 0,
       visitasTotal: visitasTotal || 0,
       onlineAgora: onlineAgora || 0,

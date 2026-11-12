@@ -1188,11 +1188,12 @@ const API = 'https://cloudx-backend.vercel.app';
   let vid = localStorage.getItem('_cx_vid');
   if(!vid){ vid = 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2); localStorage.setItem('_cx_vid', vid); }
 
+  try { const u = new URLSearchParams(location.search).get('utm_source'); if (u) sessionStorage.setItem('_cx_utm', u); } catch(e){}
   function track(){
     fetch(API+'/api/analytics/pageview', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ visitor_id: vid, pagina: location.pathname || '/', referrer: document.referrer || '', humano: true })
+      body: JSON.stringify({ visitor_id: vid, pagina: location.pathname || '/', referrer: document.referrer || '', utm_source: (new URLSearchParams(location.search).get('utm_source') || sessionStorage.getItem('_cx_utm') || ''), humano: true })
     }).catch(()=>{});
   }
 

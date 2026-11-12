@@ -31,6 +31,14 @@
     display: flex;
     min-height: 100vh;
   }
+  #loginAdmin { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: none; align-items: center; justify-content: center; padding: 20px; }
+  #loginAdmin .box { width: 100%; max-width: 360px; background: var(--sidebar); border: 1px solid var(--border); border-radius: 14px; padding: 28px; }
+  #loginAdmin h1 { font-size: 20px; margin: 0 0 6px; }
+  #loginAdmin p { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+  #loginAdmin input { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; margin-bottom: 12px; }
+  #loginAdmin button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--purple); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; }
+  #loginAdmin button:disabled { opacity: .5; cursor: wait; }
+  #loginErro { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 18px; }
   .sidebar {
     width: 220px;
     background: var(--sidebar);
@@ -269,6 +277,16 @@
 </head>
 <body>
 
+<div id="loginAdmin">
+  <form class="box" onsubmit="entrarAdmin(event)">
+    <h1>☁️ CloudX Admin</h1>
+    <p>Digite o token de admin (variável <b>ADMIN_TOKEN</b> da Vercel) para entrar.</p>
+    <input type="password" id="loginToken" placeholder="Token de admin" autocomplete="current-password" autofocus>
+    <button type="submit" id="loginBtn">Entrar</button>
+    <div id="loginErro"></div>
+  </form>
+</div>
+
 <div class="sidebar">
   <div class="logo">
     <div class="logo-icon">☁️</div>
@@ -280,6 +298,7 @@
   <div class="nav-item" data-tab="analytics">📈 Visitas</div>
     <div class="nav-item" data-tab="email">✉️ E-mail</div>
     <div class="nav-item" data-tab="whats">💬 WhatsApp</div>
+  <div class="nav-item" onclick="sairAdmin()" style="margin-top:24px;color:var(--muted)">🚪 Sair</div>
 </div>
 
 <div class="main">
@@ -373,7 +392,7 @@
     <div class="panel leads-table-wrap" id="rowUltimos" style="display:none">
       <div class="panel-head">
         <h2>🆕 Últimos cadastros</h2>
-        <a class="link-aba" id="btnEmails" onclick="alternarEmails()">🔓 Mostrar e-mails completos</a>
+        <a class="link-aba" id="btnEmails" style="display:none"></a>
       </div>
       <div id="ultimosBox"></div>
     </div>
@@ -382,6 +401,15 @@
     <div class="panel" id="rowRegiaoClientes" style="display:none">
       <h2>📍 Clientes por região</h2>
       <div id="regiaoClientesBox"></div>
+    </div>
+
+    <!-- Clientes perto do limite -->
+    <div class="panel leads-table-wrap" id="rowLimite" style="display:none">
+      <div class="panel-head">
+        <h2>📈 Clientes perto do limite (oportunidade de upgrade)</h2>
+        <a class="link-aba" id="btnCopiarLimite" onclick="copiarEmailsLimite()">📋 Copiar e-mails</a>
+      </div>
+      <div id="limiteBox"></div>
     </div>
 
     <footer id="atualizadoEm"></footer>
@@ -507,6 +535,11 @@
     <div class="panel" style="margin-bottom:14px;">
       <h2>📅 Visitas nos últimos 14 dias</h2>
       <div id="graficoVisitas"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px;">
+      <h2>🧭 Origem do tráfego (últimos 30 dias)</h2>
+      <div id="origemBox"></div>
     </div>
 
     <div class="panel" style="margin-bottom:14px;">
@@ -815,7 +848,7 @@
     try {
       await fetch(`${LEADS_URL}/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: cab({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ status: novoStatus }),
       });
       carregarTudo();
@@ -887,7 +920,7 @@
     try {
       const resp = await fetch(CAMPANHAS_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: cab({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ nome, canal, orcamento }),
       });
       const data = await resp.json();
@@ -905,7 +938,7 @@
     try {
       await fetch(`${CAMPANHAS_URL}/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: cab({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(campos),
       });
     } catch (e) {
@@ -916,7 +949,7 @@
   async function excluirCampanha(id) {
     if (!confirm('Tem certeza que quer excluir essa campanha?')) return;
     try {
-      await fetch(`${CAMPANHAS_URL}/${id}`, { method: 'DELETE' });
+      await fetch(`${CAMPANHAS_URL}/${id}`, { method: 'DELETE', headers: cab() });
       carregarTudo();
     } catch (e) {
       alert('Erro ao excluir: ' + e.message);
@@ -972,6 +1005,47 @@
     };
     box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px">
       ${lista(porEstado || [], 'Por estado')}${lista(porCidade || [], 'Por cidade')}</div>${rodape ? `<div class="delta" style="margin-top:6px">${rodape}</div>` : ''}`;
+  }
+
+  function desenharOrigem(lista) {
+    const box = document.getElementById('origemBox');
+    if (!lista || !lista.length) { box.innerHTML = '<div class="vazio">Ainda sem dados de origem. Aguarde novas visitas.</div>'; return; }
+    const total = lista.reduce((a, i) => a + i.total, 0) || 1, max = Math.max(...lista.map(i => i.total), 1);
+    box.innerHTML = lista.map(i => `
+      <div style="margin-bottom:10px">
+        <div class="stat-row" style="padding:0"><span>${esc(i.nome)}</span><span>${fmtNum(i.total)} visitantes · ${Math.round(i.total / total * 100)}%</span></div>
+        <div class="barra"><div style="width:${Math.round(i.total / max * 100)}%;background:var(--purple)"></div></div>
+      </div>`).join('') +
+      '<div class="delta" style="margin-top:6px">Visitantes únicos, pela primeira origem registrada. "Direto" = digitou o endereço, favorito ou app sem origem. Use links com <b>?utm_source=instagram</b> para identificar suas divulgações.</div>';
+  }
+
+  let limiteEmails = [];
+  function desenharLimite(info) {
+    const row = document.getElementById('rowLimite'), box = document.getElementById('limiteBox');
+    if (!info) { row.style.display = 'none'; return; }
+    row.style.display = 'block';
+    limiteEmails = (info.lista || []).map(c => c.email).filter(e => e && e.includes('@'));
+    if (!info.lista || !info.lista.length) { box.innerHTML = '<div class="vazio">Nenhum cliente usando 80% ou mais da cota no momento.</div>'; return; }
+    const assunto = encodeURIComponent('Seu espaço no CloudX está acabando');
+    const linhas = info.lista.map(c => {
+      const cor = c.percentual >= 95 ? 'var(--red)' : 'var(--purple)';
+      const corpo = encodeURIComponent(`Olá! Você já está usando ${c.percentual}% do seu espaço no CloudX. Para continuar enviando arquivos sem interrupção, vale conhecer nossos planos com mais armazenamento. Qualquer dúvida é só responder este e-mail.`);
+      return `<tr>
+        <td>${esc(c.email)}</td>
+        <td>${esc(NOMES_PLANO[c.plano] || c.plano)}</td>
+        <td style="min-width:140px"><div class="stat-row" style="padding:0"><span>${c.percentual}%</span><span class="lead-data">${fmtBytes(c.usadoBytes)} de ${fmtBytes(c.limiteBytes)}</span></div>
+          <div class="barra"><div style="width:${Math.min(100, c.percentual)}%;background:${cor}"></div></div></td>
+        <td>${c.email.includes('@') ? `<a class="link-aba" href="mailto:${esc(c.email)}?subject=${assunto}&body=${corpo}">✉ Enviar e-mail</a>` : ''}</td>
+      </tr>`;
+    }).join('');
+    box.innerHTML = `<table class="leads-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Uso</th><th></th></tr></thead><tbody>${linhas}</tbody></table>` +
+      (info.total > info.lista.length ? `<div class="dica" style="margin-top:10px">Mostrando ${info.lista.length} de ${info.total} clientes acima de 80%.</div>` : '');
+  }
+  async function copiarEmailsLimite() {
+    if (!limiteEmails.length) return;
+    try { await navigator.clipboard.writeText(limiteEmails.join(', ')); document.getElementById('btnCopiarLimite').textContent = '✅ Copiado!'; }
+    catch (e) { prompt('Copie os e-mails:', limiteEmails.join(', ')); }
+    setTimeout(() => { document.getElementById('btnCopiarLimite').textContent = '📋 Copiar e-mails'; }, 2000);
   }
 
   function preencherPaginas(paginas) {
@@ -1215,16 +1289,47 @@
     carregarTudo();
   }
 
-  async function buscarJson(url, headers) {
+  // Todas as chamadas do painel levam o token. Se o servidor responder 401, volta para a tela de login.
+  const cab = (extra) => Object.assign({ 'x-admin-token': lerToken() }, extra || {});
+  function mostrarLogin(msg) {
+    document.getElementById('loginAdmin').style.display = 'flex';
+    document.getElementById('loginErro').textContent = msg || '';
+    setTimeout(() => { const i = document.getElementById('loginToken'); if (i) i.focus(); }, 50);
+  }
+  function sairAdmin() { salvarToken(''); location.reload(); }
+  async function entrarAdmin(ev) {
+    ev.preventDefault();
+    const t = document.getElementById('loginToken').value.trim();
+    if (!t) return;
+    const btn = document.getElementById('loginBtn'); btn.disabled = true; btn.textContent = 'Verificando...';
     try {
-      const resp = await fetch(url, headers ? { headers } : undefined);
-      return await resp.json();
+      const r = await fetch('https://cloudx-backend.vercel.app/api/admin/verificar', { headers: { 'x-admin-token': t } });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) {
+        salvarToken(t);
+        document.getElementById('loginToken').value = '';
+        document.getElementById('loginAdmin').style.display = 'none';
+        carregarTudo();
+      } else {
+        document.getElementById('loginErro').textContent = d.erro || ('Não foi possível entrar (' + r.status + ').');
+      }
+    } catch (e) { document.getElementById('loginErro').textContent = 'Sem conexão com o servidor.'; }
+    finally { btn.disabled = false; btn.textContent = 'Entrar'; }
+  }
+
+  async function buscarJson(url) {
+    try {
+      const resp = await fetch(url, { headers: cab() });
+      const dados = await resp.json();
+      if (resp.status === 401) { salvarToken(''); mostrarLogin('Token inválido ou expirado. Entre novamente.'); return null; }
+      return dados;
     } catch (e) {
       return null;
     }
   }
 
   async function carregarTudo() {
+    if (!lerToken()) { mostrarLogin(); return; }
     const status = document.getElementById('status');
     const erroBox = document.getElementById('erroBox');
     status.textContent = 'Carregando dados reais...';
@@ -1232,7 +1337,7 @@
 
     // Cada fonte carrega separado: se uma falhar, as outras continuam aparecendo
     const [resumo, dados, leads, campanhas, analytics] = await Promise.all([
-      buscarJson(RESUMO_URL, lerToken() ? { 'x-admin-token': lerToken() } : null),
+      buscarJson(RESUMO_URL),
       buscarJson(STATS_URL),
       buscarJson(LEADS_URL),
       buscarJson(CAMPANHAS_URL),
@@ -1244,6 +1349,7 @@
     // Visão geral
     if (resumo && resumo.ok) {
       renderizarResumo(resumo);
+      desenharLimite(resumo.proximosLimite);
       if (resumo.clientesPorRegiao) {
         const cr = resumo.clientesPorRegiao;
         document.getElementById('rowRegiaoClientes').style.display = 'block';
@@ -1280,6 +1386,7 @@
       document.getElementById('analyticsCards').style.display = 'grid';
       desenharGraficoVisitas(analytics.visitasPorDia);
       preencherPaginas(analytics.paginasMaisAcessadas);
+      desenharOrigem(analytics.origemTrafego);
       desenharRegiao('regiaoVisitantesBox', analytics.visitantesPorEstado, analytics.visitantesPorCidade, 'visitantes', 'Localização aproximada pelo IP; visitantes únicos.');
     } else {
       falhas.push('visitas');
